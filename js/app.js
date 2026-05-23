@@ -1,11 +1,11 @@
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
 
-// ================= المتغيرات وحالة النظام =================
 let allBatches = {};
 let allTransactions = {};
 let allFreezerLogs = {};
-let manualCash = 0; // المتغير الجديد لتتبع الكاش المتاح بالخزنة
+let manualCash = 0; 
+let currentFeedStock = 0; // متغير المخزن الجديد
 
 const birdStandards = {
     quail: { name: 'سمان', hatcher: 15, hatch: 18, slaughter: 35 },
@@ -16,7 +16,6 @@ const birdStandards = {
 let globalSettings = { birdType: 'quail', feedPrice: 30, royal: 120, super_special: 110, special: 100, jumbo: 90, super: 80, bad: 0 };
 const gradeNames = { royal: 'رويال', super_special: 'سوبر سبشيال', special: 'سبشيال', jumbo: 'جامبو', super: 'سوبر', bad: 'كسر/فرز' };
 
-// ================= ربط دوال الواجهة بالـ Window =================
 window.switchPage = (pageId) => switchPage(pageId, event.currentTarget);
 window.openModal = (id) => {
     if(id === 'modalBatch') document.getElementById('bBirdType').value = globalSettings.birdType || 'quail';
@@ -26,13 +25,41 @@ window.closeModal = closeModal;
 window.toggleFab = toggleFab;
 window.showToast = showToast;
 
-// ================= الاستماع لرصيد الخزنة اليدوي =================
+// ================= مراقبة مخزن العلف =================
+onValue(ref(db, "inventory/feedStock"), (snapshot) => {
+    currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
+    const feedEl = document.getElementById('feedStockDisplay');
+    if(feedEl) feedEl.innerText = currentFeedStock + " كجم";
+    
+    // إعادة رسم الداشبورد لتحديث التنبيهات بناءً على المخزن
+    if(Object.keys(allBatches).length > 0) renderBatches();
+});
+
+// ================= شراء وتوريد العلف =================
+window.buyFeed = async () => {
+    const qty = parseFloat(document.getElementById('bfQty').value);
+    const cost = parseFloat(document.getElementById('bfTotalCost').value);
+    if(!qty || !cost) return showToast("برجاء إدخال الكمية والتكلفة", true);
+
+    // 1. زيادة المخزن
+    await set(ref(db, "inventory/feedStock"), currentFeedStock + qty);
+    
+    // 2. تسجيل مصروف عام (خصم من الأرباح العامة)
+    await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `شراء وتوريد علف للمخزن (${qty} كجم)`, batchId: 'general', date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+    
+    // 3. خصم من الكاش المتاح (الخزنة اليدوية)
+    await set(ref(db, "cashBox"), manualCash - cost);
+
+    document.getElementById('bfQty').value = ''; document.getElementById('bfTotalCost').value = '';
+    closeModal('modalBuyFeed');
+    showToast(`تم إضافة ${qty} كجم للمخزن وخصم ${cost} ج.م`);
+};
+
 onValue(ref(db, "cashBox"), (snapshot) => {
     manualCash = snapshot.exists() ? snapshot.val() : 0;
     updateCashDisplay();
 });
 
-// دالة ذكية لحقن وتحديث خانة "الكاش المتاح معك" داخل كارت الماليات
 function updateCashDisplay() {
     const netProfitEl = document.getElementById('netProfit');
     if (!netProfitEl) return;
@@ -42,35 +69,25 @@ function updateCashDisplay() {
         const parent = netProfitEl.parentElement;
         const container = document.createElement('div');
         container.id = 'customCashBox';
-        container.style.marginTop = '15px';
-        container.style.paddingTop = '12px';
-        container.style.borderTop = '1px dashed rgba(255,255,255,0.3)';
-        container.style.textAlign = 'center';
+        container.style.marginTop = '15px'; container.style.paddingTop = '12px'; container.style.borderTop = '1px dashed var(--border)'; container.style.textAlign = 'center';
         container.innerHTML = `
-            <span style="font-size: 13px; opacity: 0.8; display:block; margin-bottom:4px;">💵 الكاش الفعلي المتاح معك حالياً (رصيد الخزنة):</span>
-            <div style="font-size: 26px; font-weight: 900; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div>
-            <button onclick="editCashBox()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>
+            <span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span>
+            <div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div>
+            <button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: var(--transition-smooth);"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>
         `;
         parent.appendChild(container);
         cashBoxEl = document.getElementById('customCashBoxDisplay');
     }
-    if (cashBoxEl) {
-        cashBoxEl.innerText = manualCash + " ج.م";
-    }
+    if (cashBoxEl) cashBoxEl.innerText = manualCash + " ج.م";
 }
 
-// دالة تعديل الكاش اليدوي
 window.editCashBox = async () => {
     const newCash = prompt("اكتب المبلغ الفعلي المتواجد في جيبك أو خزنتك الآن لتحديث الرصيد:", manualCash);
     if (newCash !== null && !isNaN(newCash) && newCash.trim() !== "") {
-        await set(ref(db, "cashBox"), parseFloat(newCash));
-        showToast("تم تحديث رصيد الكاش اليدوي بنجاح");
-    } else if (newCash !== null) {
-        showToast("برجاء إدخال رقم صحيح", true);
+        await set(ref(db, "cashBox"), parseFloat(newCash)); showToast("تم تحديث رصيد الكاش بنجاح");
     }
 };
 
-// ================= الإعدادات =================
 onValue(ref(db, "settings"), (snapshot) => {
     if(snapshot.exists()) {
         globalSettings = { ...globalSettings, ...snapshot.val() };
@@ -86,75 +103,60 @@ onValue(ref(db, "settings"), (snapshot) => {
 
 window.saveSettings = async () => {
     const newSet = {
-        birdType: document.getElementById('setBirdType').value,
-        feedPrice: parseFloat(document.getElementById('setFeed').value) || 0,
-        royal: parseFloat(document.getElementById('setRoyal').value) || 0,
-        super_special: parseFloat(document.getElementById('setSuperSpecial').value) || 0,
-        special: parseFloat(document.getElementById('setSpecial').value) || 0,
-        jumbo: parseFloat(document.getElementById('setJumbo').value) || 0,
-        super: parseFloat(document.getElementById('setSuper').value) || 0,
-        bad: 0
+        birdType: document.getElementById('setBirdType').value, feedPrice: parseFloat(document.getElementById('setFeed').value) || 0,
+        royal: parseFloat(document.getElementById('setRoyal').value) || 0, super_special: parseFloat(document.getElementById('setSuperSpecial').value) || 0,
+        special: parseFloat(document.getElementById('setSpecial').value) || 0, jumbo: parseFloat(document.getElementById('setJumbo').value) || 0,
+        super: parseFloat(document.getElementById('setSuper').value) || 0, bad: 0
     };
-    await set(ref(db, 'settings'), newSet);
-    showToast("تم تحديث الإعدادات والأسعار");
+    await set(ref(db, 'settings'), newSet); showToast("تم تحديث الإعدادات");
 };
 
-// ================= العمليات الحسابية والأساسية =================
 window.calculateSaleTotal = () => {
-    const grade = document.getElementById('sGrade').value;
-    const qty = parseInt(document.getElementById('sQty').value) || 0;
-    const price = globalSettings[grade] || 0;
-    document.getElementById('saleTotalDisplay').innerText = (qty * price) + " ج.م";
+    const grade = document.getElementById('sGrade').value; const qty = parseInt(document.getElementById('sQty').value) || 0;
+    document.getElementById('saleTotalDisplay').innerText = (qty * (globalSettings[grade] || 0)) + " ج.م";
 };
 
 window.saveNewBatch = async () => {
-    const name = document.getElementById('bName').value;
-    const eggs = parseInt(document.getElementById('bEggs').value);
-    const dateStr = document.getElementById('bDate').value;
-    const bType = document.getElementById('bBirdType').value;
-    
+    const name = document.getElementById('bName').value; const eggs = parseInt(document.getElementById('bEggs').value);
+    const dateStr = document.getElementById('bDate').value; const bType = document.getElementById('bBirdType').value;
     if(!name || !eggs) return showToast("أكمل البيانات", true);
 
-    const std = birdStandards[bType];
-    const insertD = new Date(dateStr);
-    
+    const std = birdStandards[bType]; const insertD = new Date(dateStr);
     const hatcherD = new Date(insertD); hatcherD.setDate(insertD.getDate() + std.hatcher);
     const hatchD = new Date(insertD); hatchD.setDate(insertD.getDate() + std.hatch);
     const rearD = new Date(hatchD); rearD.setDate(hatchD.getDate() + std.slaughter);
 
-    await push(ref(db, 'batches'), { 
-        name, birdType: bType, insertDate: dateStr, hatcherDate: hatcherD.toISOString().split('T')[0], hatchDate: hatchD.toISOString().split('T')[0], rearDate: rearD.toISOString().split('T')[0], initialEggs: eggs, status: 'incubator', totalDead: 0, totalFeed: 0 
-    });
-    
-    document.getElementById('bName').value = '';
-    document.getElementById('bEggs').value = '';
-    closeModal('modalBatch');
-    showToast(`تم بدء دورة (${std.name})`);
+    await push(ref(db, 'batches'), { name, birdType: bType, insertDate: dateStr, hatcherDate: hatcherD.toISOString().split('T')[0], hatchDate: hatchD.toISOString().split('T')[0], rearDate: rearD.toISOString().split('T')[0], initialEggs: eggs, status: 'incubator', totalDead: 0, totalFeed: 0 });
+    document.getElementById('bName').value = ''; document.getElementById('bEggs').value = ''; closeModal('modalBatch'); showToast(`تم بدء الدورة`);
 };
 
+// ================= تسجيل السحب اليومي (تم التحديث للمخزن) =================
 window.saveDailyLog = async () => {
     const id = document.getElementById('dBatch').value;
     const dead = parseInt(document.getElementById('dDead').value) || 0;
     const feed = parseFloat(document.getElementById('dFeed').value) || 0;
     if(!id || (dead===0 && feed===0)) return showToast("أدخل بيانات صحيحة", true);
 
-    const b = allBatches[id];
-    const today = new Date().toISOString().split('T')[0];
+    const b = allBatches[id]; const today = new Date().toISOString().split('T')[0];
 
     await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
 
     if(feed > 0) {
+        if(currentFeedStock < feed) {
+            alert(`⚠️ تحذير: رصيد المخزن (${currentFeedStock} ك) لا يكفي لهذه الوجبة! الرجاء شراء علف أولاً.`);
+            return;
+        }
+        // 1. خصم العلف من المخزن العيني
+        await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
+        
+        // 2. تسجيل (تكلفة دفترية فقط للدفعة) عشان حسابات الـ P&L - لن تخصم من الكاش لأنها ادفعت وقت الشراء
         const cost = feed * (globalSettings.feedPrice || 30);
-        await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `علف تلقائي (${feed}ك) - ${b.name}`, batchId: id, date: today, timestamp: Date.now() });
-        // خصم تلقائي من الكاش المتاح
-        await set(ref(db, "cashBox"), manualCash - cost);
+        await push(ref(db, 'ledger'), { type: 'batch_cost', amount: cost, desc: `سحب علف من المخزن (${feed}ك)`, batchId: id, date: today, timestamp: Date.now() });
     }
 
     await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
-    document.getElementById('dDead').value = 0;
-    document.getElementById('dFeed').value = 0;
-    closeModal('modalDaily');
-    showToast("تم حفظ السجل");
+    document.getElementById('dDead').value = 0; document.getElementById('dFeed').value = 0;
+    closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك وخصمه من المخزن");
 };
 
 window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
@@ -164,82 +166,46 @@ window.saveTransaction = async (type, amountOverride = null, descOverride = null
     if(!amount) return showToast("أدخل المبلغ", true);
 
     await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
-    
-    // تحديث الكاش المتاح بناءً على نوع المعاملة
-    if (type === 'in') {
-        await set(ref(db, "cashBox"), manualCash + amount);
-    } else {
-        await set(ref(db, "cashBox"), manualCash - amount);
-    }
+    if (type === 'in') await set(ref(db, "cashBox"), manualCash + amount);
+    else if (type === 'out') await set(ref(db, "cashBox"), manualCash - amount); // note: type batch_cost doesn't touch cash
 
-    if(!amountOverride) {
-        document.getElementById('eAmount').value = '';
-        document.getElementById('eType').value = '';
-        closeModal('modalExpense');
-        showToast("تم التسجيل بالدفتر");
-    }
+    if(!amountOverride) { document.getElementById('eAmount').value = ''; document.getElementById('eType').value = ''; closeModal('modalExpense'); showToast("تم التسجيل بالدفتر"); }
 };
 
 window.processSale = async () => {
-    const grade = document.getElementById('sGrade').value;
-    const qty = parseInt(document.getElementById('sQty').value) || 0;
-    const price = globalSettings[grade] || 0;
-    const amount = qty * price;
-
+    const grade = document.getElementById('sGrade').value; const qty = parseInt(document.getElementById('sQty').value) || 0;
+    const amount = qty * (globalSettings[grade] || 0);
     if(!qty) return showToast("أدخل العدد", true);
 
     const snap = await get(ref(db, `inventory/freezer/${grade}`));
     const currentStock = snap.exists() ? snap.val() : 0;
-    if(currentStock < qty) return showToast(`لا يوجد رصيد! المتاح: ${currentStock}`, true);
+    if(currentStock < qty) return showToast(`الرصيد لا يكفي! المتاح: ${currentStock}`, true);
 
     await set(ref(db, `inventory/freezer/${grade}`), currentStock - qty);
     await saveTransaction('in', amount, `مبيعات (${qty} جوز - ${gradeNames[grade]})`);
-    
-    document.getElementById('sQty').value = '';
-    document.getElementById('saleTotalDisplay').innerText = "0 ج.م";
-    closeModal('modalSale');
-    showToast("تم البيع بنجاح");
+    document.getElementById('sQty').value = ''; document.getElementById('saleTotalDisplay').innerText = "0 ج.م"; closeModal('modalSale'); showToast("تم البيع بنجاح");
 };
 
-// ================= أزرار الإجراءات (تعديل وحذف الدفعات) =================
 window.renameBatch = async (id) => {
-    const currentName = allBatches[id].name;
-    const newName = prompt("أدخل الاسم الجديد للدفعة:", currentName);
-    
-    if (newName && newName.trim() !== "" && newName !== currentName) {
-        await update(ref(db, `batches/${id}`), { name: newName.trim() });
-        showToast("تم تغيير اسم الدفعة بنجاح");
-    }
+    const currentName = allBatches[id].name; const newName = prompt("الاسم الجديد للدفعة:", currentName);
+    if (newName && newName.trim() !== "" && newName !== currentName) { await update(ref(db, `batches/${id}`), { name: newName.trim() }); showToast("تم التغيير"); }
 };
 
-window.deleteBatch = async (id) => {
-    if(confirm("⚠️ هل أنت متأكد من حذف هذه الدفعة نهائياً؟")) {
-        await remove(ref(db, `batches/${id}`));
-        showToast("تم حذف الدفعة");
-    }
-};
+window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
 
-// دالة حذف المعاملات المالية الفردية من الدفتر 🗑️
 window.deleteTransaction = async (id) => {
-    if(confirm("⚠️ هل أنت متأكد من حذف هذه المعاملة المالية من السجلات نهائياً؟")) {
+    if(confirm("حذف هذه المعاملة؟")) {
         const t = allTransactions[id];
-        // إعادة تعديل رصيد الخزنة قبل الحذف العكسي
-        if (t.type === 'in') {
-            await set(ref(db, "cashBox"), manualCash - t.amount);
-        } else {
-            await set(ref(db, "cashBox"), manualCash + t.amount);
-        }
-        await remove(ref(db, `ledger/${id}`));
-        showToast("تم حذف المعاملة وإعادة توازن الحسابات");
+        if (t.type === 'in') await set(ref(db, "cashBox"), manualCash - t.amount);
+        else if (t.type === 'out') await set(ref(db, "cashBox"), manualCash + t.amount);
+        await remove(ref(db, `ledger/${id}`)); showToast("تم الحذف وتعديل الخزنة");
     }
 };
 
 window.resetSystem = async () => {
-    if(confirm("🛑 تحذير خطير: سيتم مسح كل البيانات!")) {
-        let p = prompt("اكتب كلمة 'تأكيد' لمسح البيانات:");
-        if(p === 'تأكيد') {
-            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory')); await remove(ref(db, 'cashBox'));
-            showToast("تم تصفير النظام بالكامل");
+    if(confirm("🛑 سيتم مسح كل البيانات!")) {
+        if(prompt("اكتب 'تأكيد':") === 'تأكيد') {
+            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory')); await remove(ref(db, 'cashBox')); showToast("تم التصفير");
         }
     }
 };
@@ -247,190 +213,121 @@ window.resetSystem = async () => {
 window.updateStage = async (id, stage) => { await update(ref(db, `batches/${id}`), { status: stage }); };
 window.promptHatch = (id) => { document.getElementById('hatchBatchId').value = id; openModal('modalHatch'); };
 window.moveToRearing = async () => {
-    const id = document.getElementById('hatchBatchId').value;
-    const healthy = parseInt(document.getElementById('hHealthy').value);
-    const batch = allBatches[id];
-    
+    const id = document.getElementById('hatchBatchId').value; const healthy = parseInt(document.getElementById('hHealthy').value);
     if(!healthy) return showToast("أدخل العدد", true);
-    
-    const unfert = parseInt(document.getElementById('hUnfert').value)||0;
-    const deadShell = parseInt(document.getElementById('hDead').value)||0;
-    const hatchRate = ((healthy / batch.initialEggs) * 100).toFixed(1);
-
-    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate: hatchRate, unfertilized: unfert, deadInShell: deadShell });
-    closeModal('modalHatch'); showToast(`تم النقل للتربية. نسبة الفقس: ${hatchRate}%`);
+    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
+    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate: hatchRate, unfertilized: parseInt(document.getElementById('hUnfert').value)||0, deadInShell: parseInt(document.getElementById('hDead').value)||0 });
+    closeModal('modalHatch'); showToast("تم النقل للتربية");
 };
 
 window.promptClassify = (id) => { document.getElementById('classBatchId').value = id; openModal('modalClassify'); };
 window.finishSlaughter = async () => {
-    const id = document.getElementById('classBatchId').value;
-    const batch = allBatches[id];
-    let yieldTotal = 0; const toAdd = {};
-    
-    Object.keys(gradeNames).forEach(g => {
-        const val = parseInt(document.getElementById(`c_${g}`).value) || 0;
-        toAdd[g] = val; if(g !== 'bad') yieldTotal += val;
-    });
+    const id = document.getElementById('classBatchId').value; let yieldTotal = 0; const toAdd = {};
+    Object.keys(gradeNames).forEach(g => { const val = parseInt(document.getElementById(`c_${g}`).value) || 0; toAdd[g] = val; if(g !== 'bad') yieldTotal += val; });
     if(yieldTotal === 0 && toAdd['bad'] === 0) return showToast("أدخل ناتج التصنيف", true);
 
-    const snap = await get(ref(db, "inventory/freezer"));
-    let currentF = snap.exists() ? snap.val() : {};
+    const snap = await get(ref(db, "inventory/freezer")); let currentF = snap.exists() ? snap.val() : {};
     Object.keys(toAdd).forEach(g => currentF[g] = (currentF[g]||0) + toAdd[g]);
     await set(ref(db, "inventory/freezer"), currentF);
-
-    const today = new Date().toISOString().split('T')[0];
-    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: batch.name, birdType: batch.birdType || 'quail', dateAdded: today, items: toAdd });
-
+    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, birdType: allBatches[id].birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
     await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
-    closeModal('modalClassify'); showToast("اكتملت الدفعة");
+    closeModal('modalClassify'); showToast("تم الترحيل للفريزر");
 };
 
-// ================= عرض البيانات (Realtime) =================
-onValue(ref(db, "batches"), (snapshot) => {
-    allBatches = snapshot.exists() ? snapshot.val() : {};
-    renderBatches();
-    if(document.getElementById('reportBatchSelect').value) window.generateBatchReport();
-});
+onValue(ref(db, "batches"), (snapshot) => { allBatches = snapshot.exists() ? snapshot.val() : {}; renderBatches(); if(document.getElementById('reportBatchSelect').value) window.generateBatchReport(); });
 
 function renderBatches() {
     const ui = { inc: document.getElementById('incubatorList'), rear: document.getElementById('rearingList'), slaugh: document.getElementById('slaughterList'), alerts: document.getElementById('alertsContainer'), dSelect: document.getElementById('dBatch'), eSelect: document.getElementById('eBatch'), rSelect: document.getElementById('reportBatchSelect') };
-    ui.inc.innerHTML = ''; ui.rear.innerHTML = ''; ui.slaugh.innerHTML = ''; ui.alerts.innerHTML = ''; ui.dSelect.innerHTML = ''; ui.eSelect.innerHTML = '<option value="general">مصروف عام</option>'; ui.rSelect.innerHTML = '<option value="">-- اختر الدفعة للتقرير --</option>';
-    
+    ui.inc.innerHTML = ''; ui.rear.innerHTML = ''; ui.slaugh.innerHTML = ''; ui.alerts.innerHTML = ''; ui.dSelect.innerHTML = ''; ui.eSelect.innerHTML = '<option value="general">مصروف عام</option>'; ui.rSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
     let stats = { eggs: 0, chicks: 0 }; const now = new Date();
 
+    // التحقق من الطوارئ للمخزن
+    if (currentFeedStock < 50) {
+        ui.alerts.innerHTML += `<div style="color:var(--danger); font-weight:800; margin-bottom:12px; padding:10px; border:1px dashed var(--danger); border-radius:8px;"><i class="fas fa-triangle-exclamation"></i> تحذير عاجل: العلف بالمخزن أوشك على النفاذ (${currentFeedStock} كجم فقط)!</div>`;
+    }
+
     Object.keys(allBatches).forEach(id => {
-        const b = allBatches[id];
-        const bTypeName = birdStandards[b.birdType || 'quail']?.name || 'طائر';
-        
+        const b = allBatches[id]; const bTypeName = birdStandards[b.birdType || 'quail']?.name || 'طائر';
         ui.rSelect.innerHTML += `<option value="${id}">${b.name} (${bTypeName})</option>`;
         if(b.status !== 'completed') ui.eSelect.innerHTML += `<option value="${id}">${b.name}</option>`;
 
         const datesHtml = `<div class="dates-row"><span>📅 بيض: ${b.insertDate}</span><span>🥚 مفقس: ${b.hatcherDate||'-'}</span><span>🐣 فقس: ${b.hatchDate||'-'}</span><span>🐥 ذبح: ${b.rearDate||'-'}</span></div>`;
-        
-        const actionsHtml = `<div class="batch-actions">
-            <button onclick="renameBatch('${id}')" title="تعديل اسم الدفعة" style="color: var(--info);">✏️</button>
-            <button onclick="deleteBatch('${id}')" title="حذف الدفعة" style="color: var(--danger);">🗑️</button>
-        </div>`;
+        const actionsHtml = `<div class="batch-actions"><button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button><button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button></div>`;
 
         if (b.status === 'incubator' || b.status === 'hatcher') {
-            stats.eggs += b.initialEggs;
-            const daysIn = Math.floor((now - new Date(b.insertDate)) / 86400000);
-            let badge = '', actionBtn = '';
-            const bStd = birdStandards[b.birdType || 'quail'];
-            
-            if(b.status === 'incubator') {
-                badge = `<span class="badge" style="background:var(--info);">حضانة (${bTypeName})</span>`;
-                if(daysIn >= bStd.hatcher) { actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')">نقل للمفقس</button>`; ui.alerts.innerHTML += `<div>⚠️ الدفعة <b>${b.name}</b> جاهزة للمفقس.</div>`; }
-            } else {
-                badge = `<span class="badge" style="background:var(--purple);">مفقس (${bTypeName})</span>`;
-                if(daysIn >= bStd.hatch) { actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')">إتمام الفقس</button>`; ui.alerts.innerHTML += `<div>🐣 الدفعة <b>${b.name}</b> موعد فقسها اليوم!</div>`; }
-            }
-
+            stats.eggs += b.initialEggs; const daysIn = Math.floor((now - new Date(b.insertDate)) / 86400000); let badge = '', actionBtn = ''; const bStd = birdStandards[b.birdType || 'quail'];
+            if(b.status === 'incubator') { badge = `<span class="badge" style="background:var(--info);">حضانة</span>`; if(daysIn >= bStd.hatcher) { actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')">نقل للمفقس</button>`; ui.alerts.innerHTML += `<div style="color:var(--info);">⚠️ الدفعة <b>${b.name}</b> جاهزة للمفقس.</div>`; } }
+            else { badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`; if(daysIn >= bStd.hatch) { actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')">إتمام الفقس</button>`; ui.alerts.innerHTML += `<div style="color:var(--success);">🐣 الدفعة <b>${b.name}</b> موعد فقسها اليوم!</div>`; } }
             ui.inc.innerHTML += `<div class="batch-card stage-${b.status}"><div style="display:flex; justify-content:space-between; align-items:center;"><strong>${b.name}</strong> ${badge}</div>${datesHtml}<div style="margin-top:10px; font-weight:bold;">البيض: ${b.initialEggs}</div>${actionBtn} ${actionsHtml}</div>`;
         }
         else if (b.status === 'rearing') {
-            const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive;
-            const age = Math.floor((now - new Date(b.hatchDate)) / 86400000);
-            const bStd = birdStandards[b.birdType || 'quail'];
-
+            const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive; const age = Math.floor((now - new Date(b.hatchDate)) / 86400000); const bStd = birdStandards[b.birdType || 'quail'];
             ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
-            if(age >= bStd.slaughter) ui.alerts.innerHTML += `<div>⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
-
-            ui.rear.innerHTML += `<div class="batch-card stage-rearing"><div style="display:flex; justify-content:space-between;"><strong>${b.name}</strong> <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span></div>${datesHtml}<div style="font-size:12px; color:var(--primary); margin-top:5px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div><div class="grid-2" style="margin-top:10px; background:var(--bg); padding:10px; border-radius:8px; text-align:center;"><div>متبقي: <b>${alive}</b></div><div>علف: <b>${b.totalFeed||0} ك</b></div></div><button class="btn btn-danger" onclick="updateStage('${id}','slaughter')">نقل لغرفة الذبح</button>${actionsHtml}</div>`;
+            if(age >= bStd.slaughter) ui.alerts.innerHTML += `<div style="color:var(--warning);">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
+            ui.rear.innerHTML += `<div class="batch-card stage-rearing"><div style="display:flex; justify-content:space-between;"><strong>${b.name}</strong> <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span></div>${datesHtml}<div style="font-size:12px; color:var(--primary); margin-top:5px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div><div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;"><div>متبقي: <b>${alive}</b></div><div>استهلكت: <b>${b.totalFeed||0} ك علف</b></div></div><button class="btn btn-danger" onclick="updateStage('${id}','slaughter')">نقل لغرفة الذبح</button>${actionsHtml}</div>`;
         }
-        else if (b.status === 'slaughter') {
-            ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter"><div style="display:flex; justify-content:space-between;"><strong>${b.name}</strong> <span class="badge" style="background:var(--danger);">قيد الذبح</span></div><button class="btn btn-success" onclick="promptClassify('${id}')">تصنيف وترحيل للفريزر</button>${actionsHtml}</div>`;
-        }
+        else if (b.status === 'slaughter') { ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter"><div style="display:flex; justify-content:space-between;"><strong>${b.name}</strong> <span class="badge" style="background:var(--danger);">قيد الذبح</span></div><button class="btn btn-success" onclick="promptClassify('${id}')">تصنيف وترحيل للفريزر</button>${actionsHtml}</div>`; }
     });
-    if(ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div class="text-success" style="font-weight:bold;">✅ لا يوجد تنبيهات.</div>';
+    if(ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ لا يوجد تنبيهات أو نواقص حالياً.</div>';
     document.getElementById('dashEggs').innerText = stats.eggs; document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
 onValue(ref(db, "inventory/freezer"), (snapshot) => {
-    const data = snapshot.exists() ? snapshot.val() : {};
-    let total = 0; let html = '';
-    Object.keys(gradeNames).forEach(g => {
-        if(g === 'bad') return;
-        const count = data[g] || 0; total += count;
-        html += `<div style="background:var(--bg); padding:15px; border-radius:10px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-muted); font-weight:bold;">${gradeNames[g]}</span><div style="font-size:22px; font-weight:900; color:var(--primary); margin-top:5px;">${count}</div></div>`;
-    });
+    const data = snapshot.exists() ? snapshot.val() : {}; let total = 0; let html = '';
+    Object.keys(gradeNames).forEach(g => { if(g === 'bad') return; const count = data[g] || 0; total += count; html += `<div style="background:var(--bg-main); padding:15px; border-radius:10px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary); font-weight:bold;">${gradeNames[g]}</span><div style="font-size:22px; font-weight:800; color:var(--primary); margin-top:5px;">${count}</div></div>`; });
     document.getElementById('freezerGrid').innerHTML = html; document.getElementById('dashFreezer').innerText = total;
 });
 
 onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {};
-    let html = ''; const now = new Date();
+    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
     Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
-        const log = allFreezerLogs[key];
-        const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
-        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new">جديد</span>' : (daysOld > 30 ? '<span class="freezer-tag-old">قديم</span>' : `<span style="font-size:11px;color:#777;">منذ ${daysOld} يوم</span>`);
+        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
+        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new">جديد</span>' : (daysOld > 30 ? '<span class="freezer-tag-old">قديم</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`);
         let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${gradeNames[k]}: ${log.items[k]}`).join(' | ');
-        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong>${ageTag}</div><div style="color:var(--text-muted); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
+        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong>${ageTag}</div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
     });
-    document.getElementById('freezerLogs').innerHTML = html || '<div style="text-align:center; padding:10px;">لا توجد سجلات تخزين</div>';
+    document.getElementById('freezerLogs').innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
 });
 
-// سجل المعاملات المالية المحدث مع زرار الحذف الفردي لكل عملية
 onValue(ref(db, "ledger"), (snapshot) => {
-    allTransactions = snapshot.exists() ? snapshot.val() : {};
-    let tIn = 0, tOut = 0, html = '';
+    allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
     Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
         const t = allTransactions[id];
-        if(t.type === 'in') tIn += t.amount; else tOut += t.amount;
-        html += `<div class="transaction-item">
-            <div>
-                <b>${t.desc}</b> 
-                <button onclick="deleteTransaction('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px; font-size:14px;" title="حذف هذه العملية المالية">🗑️</button>
-                <br><span style="font-size:12px;color:#777;">${t.date}</span>
-            </div>
-            <div style="font-weight:900; color:${t.type==='in'?'var(--success)':'var(--danger)'}" dir="ltr">${t.type==='in'?'+':'-'} ${t.amount} ج</div>
-        </div>`;
+        // Only count 'in' and actual cash 'out' for global Revenue/Expense. Ignore 'batch_cost' which is virtual deduction from warehouse.
+        if(t.type === 'in') tIn += t.amount; else if(t.type === 'out') tOut += t.amount;
+        
+        let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
+        let sign = t.type === 'in' ? '+' : '-';
+        let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
+
+        html += `<div class="transaction-item"><div><b>${t.desc} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> <button onclick="deleteTransaction('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br><span style="font-size:12px;color:var(--text-secondary);">${t.date}</span></div><div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount} ج</div></div>`;
     });
     document.getElementById('totalRev').innerText = tIn; document.getElementById('totalExp').innerText = tOut;
     document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; document.getElementById('dashSales').innerText = tIn;
     document.getElementById('ledgerList').innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
-    if(document.getElementById('reportBatchSelect').value) window.generateBatchReport();
-    
-    // إعادة حقن وتأكيد ظهور عنصر الخزنة اليدوية
-    updateCashDisplay();
+    if(document.getElementById('reportBatchSelect').value) window.generateBatchReport(); updateCashDisplay();
 });
 
 window.generateBatchReport = () => {
-    const id = document.getElementById('reportBatchSelect').value;
-    const container = document.getElementById('batchReportContainer');
+    const id = document.getElementById('reportBatchSelect').value; const container = document.getElementById('batchReportContainer');
     if(!id) { container.style.display = 'none'; return; }
     
     const b = allBatches[id]; let batchCost = 0; 
-    Object.values(allTransactions).forEach(t => { if(t.batchId === id && t.type === 'out') batchCost += t.amount; });
+    // Calculate P&L: count both actual out and virtual batch_cost (feed)
+    Object.values(allTransactions).forEach(t => { if(t.batchId === id && (t.type === 'out' || t.type === 'batch_cost')) batchCost += t.amount; });
     const hatched = b.hatchedChicks || 0; const dead = b.totalDead || 0;
     
     if(b.status === 'completed' && b.classifyData) {
-        const yieldTotal = b.slaughterYield || 0;
-        let potentialRevenue = 0; let outputHtml = '';
-        Object.keys(b.classifyData).forEach(g => {
-            if(b.classifyData[g] > 0) {
-                potentialRevenue += (b.classifyData[g] * (globalSettings[g]||0));
-                outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${gradeNames[g]}: ${b.classifyData[g]}</span>`;
-            }
-        });
+        const yieldTotal = b.slaughterYield || 0; let potentialRevenue = 0; let outputHtml = '';
+        Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (globalSettings[g]||0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${gradeNames[g]}: ${b.classifyData[g]}</span>`; } });
         
-        const costPerPair = yieldTotal > 0 ? ((batchCost / yieldTotal) * 2).toFixed(2) : 0;
-        const netProfit = potentialRevenue - batchCost;
-        
-        const totalFeedKg = b.totalFeed || 0;
-        const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / yieldTotal).toFixed(0) : 0;
-        let fcrStatus = '';
-        if(b.birdType === 'quail' || !b.birdType) {
-            if(feedPerBirdGrams < 450) fcrStatus = '<span style="color:var(--success);">ممتاز 🌟</span>';
-            else if(feedPerBirdGrams <= 550) fcrStatus = '<span style="color:var(--warning);">متوسط ⚠️</span>';
-            else fcrStatus = '<span style="color:var(--danger);">ضعيف ❌</span>';
-        } else { fcrStatus = '<span style="color:var(--info);">تم الحساب</span>'; }
+        const costPerPair = yieldTotal > 0 ? ((batchCost / yieldTotal) * 2).toFixed(2) : 0; const netProfit = potentialRevenue - batchCost;
+        const totalFeedKg = b.totalFeed || 0; const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / yieldTotal).toFixed(0) : 0; let fcrStatus = '';
+        if(b.birdType === 'quail' || !b.birdType) { if(feedPerBirdGrams < 450) fcrStatus = '<span style="color:var(--success);">ممتاز 🌟</span>'; else if(feedPerBirdGrams <= 550) fcrStatus = '<span style="color:var(--warning);">متوسط ⚠️</span>'; else fcrStatus = '<span style="color:var(--danger);">ضعيف ❌</span>'; } else { fcrStatus = '<span style="color:var(--info);">تم الحساب</span>'; }
 
-        let stampHtml = netProfit > 0 ? `<div class="result-stamp text-success" style="border-color:var(--success);">✅ حققت مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp text-danger" style="border-color:var(--danger);">❌ حققت خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp text-warning" style="border-color:var(--warning);">➖ تعادل</div>`);
+        let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
 
-        container.innerHTML = `<div style="background:var(--bg); padding:15px; border-radius:10px; border: 2px solid var(--border);"><div style="text-align:center; border-bottom:1px solid #ccc; padding-bottom:10px; margin-bottom:15px;"><h3 style="margin:0; color:var(--primary);">بيان ختامي - ${b.name}</h3></div><div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:white; border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-muted);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed #ccc; margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:white; padding:10px; border-radius:8px;"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>القيمة البيعية المتوقعة:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--primary); color:white; padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز</b>: <b style="font-size:18px;">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
-    } else {
-        container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل وتُذبح بعد لإصدار بيان ختامي دقيق.</div>`;
-    }
+        container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);"><div style="text-align:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;"><h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3></div><div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
+    } else { container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل وتُذبح بعد لإصدار بيان ختامي دقيق.</div>`; }
     container.style.display = 'block';
 };
