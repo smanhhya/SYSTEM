@@ -191,13 +191,47 @@
 
         <div id="settingsPage" class="page-view">
             <div class="header-title">إعدادات النظام ⚙️</div>
-            <div class="card" style="border-left: 4px solid var(--info);"><div class="card-header" style="color:var(--info);">إعدادات القطيع</div><label>نوع الطائر الافتراضي</label><select id="setBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select></div>
-            <div class="card"><div class="card-header">أسعار التشغيل والبيع</div><label>سعر كيلو العلف للاستهلاك (ج.م)</label><input type="number" id="setFeed" value="30"><label>سعر جوز الرويال (ج.م)</label><input type="number" id="setRoyal" value="120"><label>سعر جوز سوبر سبشيال (ج.م)</label><input type="number" id="setSuperSpecial" value="110"><label>سعر جوز سبشيال (ج.م)</label><input type="number" id="setSpecial" value="100"><label>سعر جوز جامبو (ج.م)</label><input type="number" id="setJumbo" value="90"><label>سعر جوز سوبر (ج.م)</label><input type="number" id="setSuper" value="80"><button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات 💾</button></div>
-            <div class="card" style="border: 1px solid var(--danger);"><div class="card-header" style="color:var(--danger);">منطقة الخطر ⚠️</div><button class="btn btn-danger" onclick="resetSystem()">تصفير كل بيانات النظام 🔄</button></div>
-        </div>
-    </div>
+            
+            <div class="card" style="border-left: 4px solid var(--info);">
+                <div class="card-header" style="color:var(--info);">إعدادات القطيع</div>
+                <label>نوع الطائر الافتراضي</label>
+                <select id="setBirdType">
+                    <option value="quail">سمان</option>
+                    <option value="chicken">فراخ بيضاء</option>
+                    <option value="turkey">رومي</option>
+                </select>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">أسعار التشغيل والبيع</div>
+                <label>سعر كيلو العلف للاستهلاك (ج.م)</label><input type="number" id="setFeed" value="30">
+                <label>سعر جوز الرويال (ج.م)</label><input type="number" id="setRoyal" value="120">
+                <label>سعر جوز سوبر سبشيال (ج.م)</label><input type="number" id="setSuperSpecial" value="110">
+                <label>سعر جوز سبشيال (ج.م)</label><input type="number" id="setSpecial" value="100">
+                <label>سعر جوز جامبو (ج.م)</label><input type="number" id="setJumbo" value="90">
+                <label>سعر جوز سوبر (ج.م)</label><input type="number" id="setSuper" value="80">
+                
+                <hr style="border:1px dashed var(--border); margin: 20px 0;">
+                
+                <label style="color: var(--primary);">💰 تسعير الإنتاج (للحسابات الختامية والمفرخ)</label>
+                <div class="grid-2">
+                    <div><label>سعر كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
+                    <div><label>سعر كتكوت الفراخ</label><input type="number" id="setChickenChick" value="25"></div>
+                    <div><label>سعر كتكوت الرومي</label><input type="number" id="setTurkeyChick" value="60"></div>
+                    <div><label>سعر بيضة الرومي (للبيع)</label><input type="number" id="setTurkeyEgg" value="10"></div>
+                </div>
 
-    <div id="modalBatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم الدفعة</label><input type="text" id="bName"><label>البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول</label><input type="date" id="bDate"><button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button></div></div>
+                <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات 💾</button>
+            </div>
+            
+            <div class="card" style="border: 1px solid var(--danger);">
+                <div class="card-header" style="color:var(--danger);">منطقة الخطر ⚠️</div>
+                <button class="btn btn-danger" onclick="resetSystem()">تصفير كل بيانات النظام 🔄</button>
+            </div>
+        </div>
+
+
+    <div id="modalBatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم الدفعة</label><input type="text" id="bName"><label>البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول</label><input type="datetime-local" id="bDate"><button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button></div></div>
     
     <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
     
