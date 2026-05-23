@@ -1,15 +1,17 @@
 // js/main.js
 import { initNavigation } from './ui.js';
 import { initSettings } from './settings.js';
-import { initBatches } from './batches.js'; // السطر الجديد
+import { initBatches } from './batches.js';
+import { initFinance } from './finance.js'; // السطر الجديد
 import { db } from './firebase.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     initSettings(); 
-    initBatches(); // تهيئة ومراقبة الدفعات
+    initBatches(); 
+    initFinance(); // تهيئة دفتر الحسابات والتسجيل اليومي
     
-    console.log("🚀 النظام جاهز وتم ربط إدارة الدفعات!");
+    console.log("🚀 النظام المالي جاهز ويعمل بكفاءة!");
 });
 
 import { openModal, closeModal } from './ui.js';
