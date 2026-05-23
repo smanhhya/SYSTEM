@@ -5,6 +5,7 @@ import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js
 let allBatches = {};
 let allTransactions = {};
 let allFreezerLogs = {};
+let manualCash = 0; // المتغير الجديد لتتبع الكاش المتاح بالخزنة
 
 const birdStandards = {
     quail: { name: 'سمان', hatcher: 15, hatch: 18, slaughter: 35 },
@@ -24,6 +25,50 @@ window.openModal = (id) => {
 window.closeModal = closeModal;
 window.toggleFab = toggleFab;
 window.showToast = showToast;
+
+// ================= الاستماع لرصيد الخزنة اليدوي =================
+onValue(ref(db, "cashBox"), (snapshot) => {
+    manualCash = snapshot.exists() ? snapshot.val() : 0;
+    updateCashDisplay();
+});
+
+// دالة ذكية لحقن وتحديث خانة "الكاش المتاح معك" داخل كارت الماليات
+function updateCashDisplay() {
+    const netProfitEl = document.getElementById('netProfit');
+    if (!netProfitEl) return;
+    
+    let cashBoxEl = document.getElementById('customCashBoxDisplay');
+    if (!cashBoxEl) {
+        const parent = netProfitEl.parentElement;
+        const container = document.createElement('div');
+        container.id = 'customCashBox';
+        container.style.marginTop = '15px';
+        container.style.paddingTop = '12px';
+        container.style.borderTop = '1px dashed rgba(255,255,255,0.3)';
+        container.style.textAlign = 'center';
+        container.innerHTML = `
+            <span style="font-size: 13px; opacity: 0.8; display:block; margin-bottom:4px;">💵 الكاش الفعلي المتاح معك حالياً (رصيد الخزنة):</span>
+            <div style="font-size: 26px; font-weight: 900; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div>
+            <button onclick="editCashBox()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s;"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>
+        `;
+        parent.appendChild(container);
+        cashBoxEl = document.getElementById('customCashBoxDisplay');
+    }
+    if (cashBoxEl) {
+        cashBoxEl.innerText = manualCash + " ج.م";
+    }
+}
+
+// دالة تعديل الكاش اليدوي
+window.editCashBox = async () => {
+    const newCash = prompt("اكتب المبلغ الفعلي المتواجد في جيبك أو خزنتك الآن لتحديث الرصيد:", manualCash);
+    if (newCash !== null && !isNaN(newCash) && newCash.trim() !== "") {
+        await set(ref(db, "cashBox"), parseFloat(newCash));
+        showToast("تم تحديث رصيد الكاش اليدوي بنجاح");
+    } else if (newCash !== null) {
+        showToast("برجاء إدخال رقم صحيح", true);
+    }
+};
 
 // ================= الإعدادات =================
 onValue(ref(db, "settings"), (snapshot) => {
@@ -101,6 +146,8 @@ window.saveDailyLog = async () => {
     if(feed > 0) {
         const cost = feed * (globalSettings.feedPrice || 30);
         await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `علف تلقائي (${feed}ك) - ${b.name}`, batchId: id, date: today, timestamp: Date.now() });
+        // خصم تلقائي من الكاش المتاح
+        await set(ref(db, "cashBox"), manualCash - cost);
     }
 
     await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
@@ -118,6 +165,13 @@ window.saveTransaction = async (type, amountOverride = null, descOverride = null
 
     await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
     
+    // تحديث الكاش المتاح بناءً على نوع المعاملة
+    if (type === 'in') {
+        await set(ref(db, "cashBox"), manualCash + amount);
+    } else {
+        await set(ref(db, "cashBox"), manualCash - amount);
+    }
+
     if(!amountOverride) {
         document.getElementById('eAmount').value = '';
         document.getElementById('eType').value = '';
@@ -147,7 +201,7 @@ window.processSale = async () => {
     showToast("تم البيع بنجاح");
 };
 
-// ================= أزرار الإجراءات (تعديل وحذف) =================
+// ================= أزرار الإجراءات (تعديل وحذف الدفعات) =================
 window.renameBatch = async (id) => {
     const currentName = allBatches[id].name;
     const newName = prompt("أدخل الاسم الجديد للدفعة:", currentName);
@@ -165,11 +219,26 @@ window.deleteBatch = async (id) => {
     }
 };
 
+// دالة حذف المعاملات المالية الفردية من الدفتر 🗑️
+window.deleteTransaction = async (id) => {
+    if(confirm("⚠️ هل أنت متأكد من حذف هذه المعاملة المالية من السجلات نهائياً؟")) {
+        const t = allTransactions[id];
+        // إعادة تعديل رصيد الخزنة قبل الحذف العكسي
+        if (t.type === 'in') {
+            await set(ref(db, "cashBox"), manualCash - t.amount);
+        } else {
+            await set(ref(db, "cashBox"), manualCash + t.amount);
+        }
+        await remove(ref(db, `ledger/${id}`));
+        showToast("تم حذف المعاملة وإعادة توازن الحسابات");
+    }
+};
+
 window.resetSystem = async () => {
     if(confirm("🛑 تحذير خطير: سيتم مسح كل البيانات!")) {
         let p = prompt("اكتب كلمة 'تأكيد' لمسح البيانات:");
         if(p === 'تأكيد') {
-            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory'));
+            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory')); await remove(ref(db, 'cashBox'));
             showToast("تم تصفير النظام بالكامل");
         }
     }
@@ -238,7 +307,6 @@ function renderBatches() {
 
         const datesHtml = `<div class="dates-row"><span>📅 بيض: ${b.insertDate}</span><span>🥚 مفقس: ${b.hatcherDate||'-'}</span><span>🐣 فقس: ${b.hatchDate||'-'}</span><span>🐥 ذبح: ${b.rearDate||'-'}</span></div>`;
         
-        // الأزرار المحدثة (تعديل + حذف)
         const actionsHtml = `<div class="batch-actions">
             <button onclick="renameBatch('${id}')" title="تعديل اسم الدفعة" style="color: var(--info);">✏️</button>
             <button onclick="deleteBatch('${id}')" title="حذف الدفعة" style="color: var(--danger);">🗑️</button>
@@ -302,18 +370,29 @@ onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
     document.getElementById('freezerLogs').innerHTML = html || '<div style="text-align:center; padding:10px;">لا توجد سجلات تخزين</div>';
 });
 
+// سجل المعاملات المالية المحدث مع زرار الحذف الفردي لكل عملية
 onValue(ref(db, "ledger"), (snapshot) => {
     allTransactions = snapshot.exists() ? snapshot.val() : {};
     let tIn = 0, tOut = 0, html = '';
     Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
         const t = allTransactions[id];
         if(t.type === 'in') tIn += t.amount; else tOut += t.amount;
-        html += `<div class="transaction-item"><div><b>${t.desc}</b><br><span style="font-size:12px;color:#777;">${t.date}</span></div><div style="font-weight:900; color:${t.type==='in'?'var(--success)':'var(--danger)'}" dir="ltr">${t.type==='in'?'+':'-'} ${t.amount}</div></div>`;
+        html += `<div class="transaction-item">
+            <div>
+                <b>${t.desc}</b> 
+                <button onclick="deleteTransaction('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px; font-size:14px;" title="حذف هذه العملية المالية">🗑️</button>
+                <br><span style="font-size:12px;color:#777;">${t.date}</span>
+            </div>
+            <div style="font-weight:900; color:${t.type==='in'?'var(--success)':'var(--danger)'}" dir="ltr">${t.type==='in'?'+':'-'} ${t.amount} ج</div>
+        </div>`;
     });
     document.getElementById('totalRev').innerText = tIn; document.getElementById('totalExp').innerText = tOut;
     document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; document.getElementById('dashSales').innerText = tIn;
     document.getElementById('ledgerList').innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
     if(document.getElementById('reportBatchSelect').value) window.generateBatchReport();
+    
+    // إعادة حقن وتأكيد ظهور عنصر الخزنة اليدوية
+    updateCashDisplay();
 });
 
 window.generateBatchReport = () => {
