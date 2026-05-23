@@ -147,6 +147,17 @@ window.processSale = async () => {
     showToast("تم البيع بنجاح");
 };
 
+// ================= أزرار الإجراءات (تعديل وحذف) =================
+window.renameBatch = async (id) => {
+    const currentName = allBatches[id].name;
+    const newName = prompt("أدخل الاسم الجديد للدفعة:", currentName);
+    
+    if (newName && newName.trim() !== "" && newName !== currentName) {
+        await update(ref(db, `batches/${id}`), { name: newName.trim() });
+        showToast("تم تغيير اسم الدفعة بنجاح");
+    }
+};
+
 window.deleteBatch = async (id) => {
     if(confirm("⚠️ هل أنت متأكد من حذف هذه الدفعة نهائياً؟")) {
         await remove(ref(db, `batches/${id}`));
@@ -226,7 +237,12 @@ function renderBatches() {
         if(b.status !== 'completed') ui.eSelect.innerHTML += `<option value="${id}">${b.name}</option>`;
 
         const datesHtml = `<div class="dates-row"><span>📅 بيض: ${b.insertDate}</span><span>🥚 مفقس: ${b.hatcherDate||'-'}</span><span>🐣 فقس: ${b.hatchDate||'-'}</span><span>🐥 ذبح: ${b.rearDate||'-'}</span></div>`;
-        const actionsHtml = `<div class="batch-actions"><button onclick="deleteBatch('${id}')" title="حذف الدفعة">🗑️</button></div>`;
+        
+        // الأزرار المحدثة (تعديل + حذف)
+        const actionsHtml = `<div class="batch-actions">
+            <button onclick="renameBatch('${id}')" title="تعديل اسم الدفعة" style="color: var(--info);">✏️</button>
+            <button onclick="deleteBatch('${id}')" title="حذف الدفعة" style="color: var(--danger);">🗑️</button>
+        </div>`;
 
         if (b.status === 'incubator' || b.status === 'hatcher') {
             stats.eggs += b.initialEggs;
