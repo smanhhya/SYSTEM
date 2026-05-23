@@ -2,16 +2,18 @@
 import { initNavigation } from './ui.js';
 import { initSettings } from './settings.js';
 import { initBatches } from './batches.js';
-import { initFinance } from './finance.js'; // السطر الجديد
+import { initFinance } from './finance.js';
+import { initFreezer } from './freezer.js'; // السطر الجديد
 import { db } from './firebase.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     initSettings(); 
     initBatches(); 
-    initFinance(); // تهيئة دفتر الحسابات والتسجيل اليومي
+    initFinance(); 
+    initFreezer(); // تشغيل الفريزر ونظام المخزون الذكي
     
-    console.log("🚀 النظام المالي جاهز ويعمل بكفاءة!");
+    console.log("🚀 نظام المخزون (الفريزر) تم ربطه بنجاح بتنفيذ FIFO!");
 });
 
 import { openModal, closeModal } from './ui.js';
