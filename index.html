@@ -6,17 +6,48 @@
     <title>نظام إدارة المزارع - ERP الشامل</title>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        const savedTheme = localStorage.getItem('saman_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
     <style>
-        /* ================= 1. DESIGN SYSTEM VARIABLES ================= */
+        /* ================= 1. DESIGN SYSTEM VARIABLES (LIGHT MODE DEFAULT) ================= */
         :root {
-            --bg-main: #0f172a; --surface: #1e293b; --border: #334155;
-            --primary: #2563eb; --primary-hover: #1d4ed8;
-            --text-primary: #e2e8f0; --text-secondary: #94a3b8;
-            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #0ea5e9;
+            /* Light Mode Colors */
+            --bg-main: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --info: #0284c7;
+            
+            /* Spacing */
             --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; --space-xxl: 32px;
+            /* Radii & Shadows */
             --radius-card: 16px; --radius-btn: 12px; --radius-input: 12px;
-            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
-            --transition-smooth: all 0.2s ease-out;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --transition-smooth: all 0.25s ease-out;
+        }
+
+        /* ================= DARK MODE VARIABLES ================= */
+        [data-theme="dark"] {
+            --bg-main: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #0ea5e9;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
         }
 
         /* ================= 2. GLOBAL & TYPOGRAPHY ================= */
@@ -24,6 +55,7 @@
             font-family: 'Cairo', system-ui, sans-serif; margin: 0; padding: 0;
             background-color: var(--bg-main); color: var(--text-primary);
             font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         /* ================= 3. RESPONSIVE LAYOUT (Sidebar & Main) ================= */
@@ -38,7 +70,7 @@
                 display: flex; flex-direction: column; width: 260px; height: 100vh;
                 position: fixed; right: 0; top: 0; background: var(--surface);
                 border-left: 1px solid var(--border); padding: var(--space-xl) var(--space-md);
-                box-sizing: border-box; z-index: 1000; overflow-y: auto;
+                box-sizing: border-box; z-index: 1000; overflow-y: auto; transition: var(--transition-smooth);
             }
             .sidebar-logo {
                 font-size: 20px; font-weight: 800; color: var(--text-primary);
@@ -52,21 +84,21 @@
             }
             .sidebar .nav-item i { margin-bottom: 0; font-size: 18px; width: 24px; text-align: center; }
             .sidebar .nav-item span { font-size: 14px; }
-            .sidebar .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); transform: translateX(-5px); }
+            .sidebar .nav-item:hover { background: rgba(148, 163, 184, 0.1); color: var(--text-primary); transform: translateX(-5px); }
             .sidebar .nav-item.active { background: var(--primary); color: white; transform: none; box-shadow: var(--shadow-soft); }
             
             .main-content { flex: 1; margin-right: 260px; padding: var(--space-xl) 5%; }
-            .fab-container { right: 290px; bottom: 30px; } /* Adjust FAB on desktop */
+            .fab-container { right: 290px; bottom: 30px; } 
         }
 
         @media (max-width: 767px) {
             .main-content { padding-bottom: 90px; }
             .bottom-nav { 
                 position: fixed; bottom: 0; left: 0; right: 0; 
-                background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(10px);
+                background: var(--surface); opacity: 0.98; backdrop-filter: blur(10px);
                 display: flex; justify-content: space-around; 
                 padding: var(--space-md) var(--space-xs) var(--space-xl) var(--space-xs); 
-                z-index: 1000; border-top: 1px solid var(--border);
+                z-index: 1000; border-top: 1px solid var(--border); transition: var(--transition-smooth);
             }
             .nav-item { text-align: center; color: var(--text-secondary); cursor: pointer; flex: 1; transition: var(--transition-smooth); }
             .nav-item i { font-size: 20px; margin-bottom: 4px; display: block; }
@@ -86,12 +118,12 @@
             border-bottom: 1px solid var(--border); margin-bottom: var(--space-xl);
         }
 
-        .card { background: var(--surface); padding: var(--space-xl); border-radius: var(--radius-card); margin-bottom: var(--space-xl); box-shadow: var(--shadow-soft); border: 1px solid var(--border); }
+        .card { background: var(--surface); padding: var(--space-xl); border-radius: var(--radius-card); margin-bottom: var(--space-xl); box-shadow: var(--shadow-soft); border: 1px solid var(--border); transition: var(--transition-smooth);}
         .card-header { font-size: 18px; color: var(--text-primary); font-weight: 700; margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border); padding-bottom: var(--space-sm); display: flex; justify-content: space-between;}
         .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-lg); }
         
         .stat-box { background: var(--bg-main) !important; padding: var(--space-lg); text-align: center; border-radius: var(--radius-btn); font-size: 13px; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); transition: var(--transition-smooth);}
-        .stat-box:hover { transform: translateY(-2px); border-color: var(--primary); }
+        .stat-box:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: var(--shadow-soft); }
         .stat-box .num { display: block; font-size: 28px; font-weight: 800; color: var(--text-primary) !important; margin-top: var(--space-xs); }
 
         /* ================= 5. FORMS & BUTTONS ================= */
@@ -101,12 +133,12 @@
         
         button.btn { border: none; padding: 14px var(--space-lg); border-radius: var(--radius-btn); width: 100%; font-size: 16px; cursor: pointer; font-weight: 700; margin-top: var(--space-xl); color: white; display: flex; justify-content: center; align-items: center; gap: var(--space-sm); transition: var(--transition-smooth); font-family: 'Cairo', sans-serif;}
         button.btn:active { transform: scale(0.98); }
-        button.btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-info { background: var(--info); } .btn-warning { background: var(--warning); color: #000; }
+        button.btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-info { background: var(--info); } .btn-warning { background: var(--warning); color: #fff; }
 
         /* ================= 6. LISTS & TABLES IMPROVEMENTS ================= */
         .batch-card { background: var(--bg-main); border: 1px solid var(--border); padding: var(--space-lg); border-radius: var(--radius-btn); margin-bottom: var(--space-lg); border-right: 4px solid var(--border); transition: var(--transition-smooth);}
-        .batch-card:hover { border-color: var(--text-secondary); transform: translateX(-4px); }
+        .batch-card:hover { border-color: var(--text-secondary); transform: translateX(-4px); box-shadow: var(--shadow-soft); }
         .batch-card.stage-incubator { border-right-color: var(--info); } .batch-card.stage-hatcher { border-right-color: var(--primary); } .batch-card.stage-rearing { border-right-color: var(--warning); } .batch-card.stage-slaughter { border-right-color: var(--danger); } .batch-card.stage-completed { border-right-color: var(--success); }
         
         .badge { padding: 4px var(--space-md); border-radius: 6px; font-size: 12px; font-weight: 700; color: white; display: inline-block; }
@@ -114,38 +146,54 @@
         .batch-actions button { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; transition: var(--transition-smooth); }
         .batch-actions button:hover { background: var(--border); transform: translateY(-2px); }
 
-        /* Transaction List (Zebra & Hover Effects) */
         .transaction-item { display: flex; justify-content: space-between; align-items: center; padding: var(--space-md) var(--space-lg); border-radius: 8px; border-bottom: 1px solid var(--border); transition: var(--transition-smooth); background: transparent; }
-        .transaction-item:hover { background: rgba(255,255,255,0.03); padding-right: 24px; border-left: 3px solid var(--primary); }
-        .transaction-item:nth-child(even) { background: rgba(0,0,0,0.15); }
+        .transaction-item:hover { background: rgba(148, 163, 184, 0.05); padding-right: 24px; border-left: 3px solid var(--primary); }
+        .transaction-item:nth-child(even) { background: rgba(0,0,0,0.02); }
+        [data-theme="dark"] .transaction-item:nth-child(even) { background: rgba(0,0,0,0.15); }
         .text-success { color: var(--success) !important; } .text-danger { color: var(--danger) !important; }
 
-        /* ================= 7. FAB & MODALS ================= */
+        /* ================= 7. FAB, THEME TOGGLE & MODALS ================= */
+        .theme-toggle-btn {
+            position: fixed; top: 20px; left: 20px; z-index: 2000;
+            background: var(--surface); color: var(--text-primary);
+            border: 1px solid var(--border); border-radius: 50%;
+            width: 44px; height: 44px; cursor: pointer; font-size: 18px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: var(--shadow-soft); transition: var(--transition-smooth);
+        }
+        .theme-toggle-btn:hover { transform: scale(1.1); border-color: var(--primary); }
+
         .fab-container { position: fixed; bottom: 85px; right: 20px; z-index: 2000; }
         .fab { background: var(--primary); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: var(--shadow-soft); cursor: pointer; border: none; transition: var(--transition-smooth); }
         .fab:active { transform: scale(0.9); } .fab:hover { transform: scale(1.05); }
-        .fab-menu { display: none; position: absolute; bottom: 70px; right: 0; background: var(--surface); border-radius: var(--radius-btn); box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 180px; padding: var(--space-sm); flex-direction: column; gap: var(--space-xs); border: 1px solid var(--border); }
+        .fab-menu { display: none; position: absolute; bottom: 70px; right: 0; background: var(--surface); border-radius: var(--radius-btn); box-shadow: 0 10px 25px rgba(0,0,0,0.15); width: 180px; padding: var(--space-sm); flex-direction: column; gap: var(--space-xs); border: 1px solid var(--border); }
+        [data-theme="dark"] .fab-menu { box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
         .fab-menu.active { display: flex; animation: slideUp 0.2s ease-out; }
         .fab-btn { background: transparent; color: var(--text-primary); padding: var(--space-md); border-radius: 8px; font-size: 14px; text-align: right; display: flex; align-items: center; gap: var(--space-sm); border: none; cursor: pointer; font-weight: 600; width: 100%; transition: var(--transition-smooth);}
-        .fab-btn:hover { background: var(--border); padding-right: var(--space-lg); }
+        .fab-btn:hover { background: var(--bg-main); padding-right: var(--space-lg); }
         @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 2500; justify-content: center; align-items: flex-end; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 2500; justify-content: center; align-items: flex-end; }
         @media (min-width: 768px) { .modal-overlay { align-items: center; } .modal-content { border-radius: 24px !important; } }
-        .modal-content { background: var(--surface); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: var(--space-xxl) var(--space-xl); box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.4);}
+        .modal-content { background: var(--surface); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: var(--space-xxl) var(--space-xl); box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.2);}
+        [data-theme="dark"] .modal-content { box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
         .close-modal { position: absolute; left: 20px; top: 20px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-secondary); width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition-smooth);}
         .close-modal:hover { color: var(--text-primary); background: var(--border); transform: rotate(90deg); }
         
         #toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: white; padding: 12px 24px; border-radius: 100px; z-index: 3000; font-weight: 600; font-size: 14px; text-align: center; box-shadow: var(--shadow-soft); }
-        .dates-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); font-size: 12px; margin-top: var(--space-sm); background: var(--surface); padding: var(--space-sm); border-radius: 8px; border: 1px solid var(--border);}
+        .dates-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); font-size: 12px; margin-top: var(--space-sm); background: var(--bg-main); padding: var(--space-sm); border-radius: 8px; border: 1px solid var(--border);}
         .result-stamp { padding: var(--space-lg); border-radius: var(--radius-btn); text-align: center; font-size: 18px; font-weight: 800; margin-top: var(--space-lg); border: 2px dashed;}
         .freezer-log { background: var(--bg-main); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-right: 4px solid var(--info); font-size: 14px; transition: var(--transition-smooth);}
-        .freezer-log:hover { transform: translateX(-4px); background: rgba(255,255,255,0.02);}
+        .freezer-log:hover { transform: translateX(-4px); background: rgba(148, 163, 184, 0.05);}
         .freezer-tag-new { background: var(--success); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
         .freezer-tag-old { background: var(--danger); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
     </style>
 </head>
 <body>
+
+    <button class="theme-toggle-btn" onclick="toggleAppTheme()" title="تبديل وضع الألوان">
+        <i id="themeIcon" class="fas fa-moon"></i>
+    </button>
 
     <div id="toast"></div>
 
@@ -167,7 +215,8 @@
         <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>عنابر التربية</span></div>
         <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>المخزون (فريزر)</span></div>
         <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>الماليات P&L</span></div>
-        <div style="flex: 1;"></div> <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>الإعدادات</span></div>
+        <div style="flex: 1;"></div>
+        <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>الإعدادات</span></div>
     </aside>
 
     <nav class="bottom-nav">
@@ -196,7 +245,7 @@
 
         <div id="finance" class="page-view">
             <div class="header-title">الماليات والنتائج</div>
-            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.1);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
+            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
             <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
             <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
         </div>
@@ -214,6 +263,33 @@
     <div id="modalExpense" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف</h3><label>المبلغ</label><input type="number" id="eAmount"><label>بند الصرف</label><input type="text" id="eType"><label>تحميل على الدفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div></div>
     <div id="modalHatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalHatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--primary);">🐣 إتمام الفقس</h3><input type="hidden" id="hatchBatchId"><label>كتاكيت سليمة</label><input type="number" id="hHealthy" style="font-size: 24px; color: var(--success);"><div class="grid-2"><div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div><div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div></div><button class="btn btn-primary" onclick="moveToRearing()">حساب ونقل للتربية</button></div></div>
     <div id="modalClassify" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button></div></div>
+
+    <script>
+        function updateIcon() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const icon = document.getElementById('themeIcon');
+            if (currentTheme === 'dark') {
+                icon.className = 'fas fa-sun';
+                icon.style.color = '#f59e0b'; // لون أصفر للشمس
+            } else {
+                icon.className = 'fas fa-moon';
+                icon.style.color = '#0f172a'; // لون غامق للقمر
+            }
+        }
+
+        function toggleAppTheme() {
+            const root = document.documentElement;
+            const currentTheme = root.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            root.setAttribute('data-theme', newTheme);
+            localStorage.setItem('saman_theme', newTheme);
+            updateIcon();
+        }
+
+        // تشغيل الأيقونة الصح عند فتح الموقع
+        window.addEventListener('DOMContentLoaded', updateIcon);
+    </script>
 
     <script type="module" src="./js/app.js"></script>
 
