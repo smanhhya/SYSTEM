@@ -54,6 +54,7 @@ export function toggleFab() {
     if(fab) fab.classList.toggle('active');
 }
 
+// دي بقى الدالة اللي كانت ناقصة وعاملة المشكلة 👇
 export function initOfflineSupport() {
     window.addEventListener('offline', () => showToast("أنت الآن Offline 🔴", true));
     window.addEventListener('online', () => showToast("تم عودة الاتصال 🟢"));
