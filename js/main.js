@@ -7,20 +7,16 @@ import { initFreezer } from './freezer.js';
 import { initReports } from './reports.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    // إخفاء شاشة الدخول فوراً لو كانت موجودة في الـ HTML
-    const loginScreen = document.getElementById('loginScreen');
-    if (loginScreen) loginScreen.style.display = 'none';
-
     // تشغيل كل أجزاء النظام مباشرة
     initNavigation();
-    initOfflineSupport();
     initSettings(); 
     initBatches(); 
     initFinance(); 
     initFreezer();
     initReports();
+    initOfflineSupport();
     
-    console.log("🚀 النظام شغال مباشر الآن بدون تسجيل دخول!");
+    console.log("🚀 النظام شغال مباشر الآن!");
 });
 
 // إتاحة الدوال للواجهة
