@@ -1,15 +1,5 @@
-// js/ui.js
-export function initNavigation() {
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        item.addEventListener('click', function(e) {
-            const pageId = this.getAttribute('data-page');
-            switchPage(pageId, this);
-        });
-    });
-}
-
-function switchPage(pageId, activeElement) {
+// دوال التنقل بين الصفحات
+export function switchPage(pageId, activeElement) {
     document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
     const target = document.getElementById(pageId);
     if (target) target.classList.add('active');
@@ -18,6 +8,7 @@ function switchPage(pageId, activeElement) {
     if(activeElement) activeElement.classList.add('active');
 }
 
+// دوال فتح وقفل النوافذ المنبثقة (Modals)
 export function openModal(id) {
     const m = document.getElementById(id);
     if(m) m.style.display = 'flex';
@@ -28,18 +19,7 @@ export function closeModal(id) {
     if(m) m.style.display = 'none';
 }
 
-export function toggleLoader(show, text = "جاري المعالجة...") {
-    const loader = document.getElementById('globalLoader');
-    if(!loader) return;
-    if (show) {
-        const textEl = loader.querySelector('.loader-text');
-        if(textEl) textEl.innerText = text;
-        loader.style.display = 'flex';
-    } else {
-        loader.style.display = 'none';
-    }
-}
-
+// دالة التنبيهات
 export function showToast(msg, isError = false) {
     const t = document.getElementById('toast');
     if(!t) return;
@@ -49,13 +29,8 @@ export function showToast(msg, isError = false) {
     setTimeout(() => t.style.display = 'none', 3000);
 }
 
+// دالة الزر العائم السريع
 export function toggleFab() {
     const fab = document.getElementById('fabMenu');
     if(fab) fab.classList.toggle('active');
-}
-
-// دي بقى الدالة اللي كانت ناقصة وعاملة المشكلة 👇
-export function initOfflineSupport() {
-    window.addEventListener('offline', () => showToast("أنت الآن Offline 🔴", true));
-    window.addEventListener('online', () => showToast("تم عودة الاتصال 🟢"));
 }
