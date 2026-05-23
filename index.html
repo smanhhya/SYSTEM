@@ -4,38 +4,95 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>نظام إدارة سمان ههيا - ERP</title>
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- احتفظ بنفس أكواد الـ CSS الموجودة في الملف القديم هنا، مع إضافة كود الـ Loader التالي -->
     <style>
-        /* ... ضف هنا كل الـ CSS القديم ... */
-        
-        /* --- Loading Spinner --- */
-        #globalLoader {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(5px);
-            z-index: 9999; justify-content: center; align-items: center; flex-direction: column;
+        :root {
+            --primary: #192a56; --secondary: #273c75; --success: #44bd32;
+            --warning: #fbc531; --info: #0097e6; --purple: #8c7ae6;
+            --danger: #e84118; --bg: #f5f6fa; --card-bg: #ffffff;
+            --text-main: #2f3640; --text-muted: #718093; --border: #dcdde1;
         }
-        .spinner {
-            border: 5px solid var(--border); border-top: 5px solid var(--primary);
-            border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite;
-        }
+
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; padding: 0; background-color: var(--bg); color: var(--text-main); padding-bottom: 90px; font-size: 16px; }
+
+        /* Loader */
+        #globalLoader { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(5px); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 5px solid var(--border); border-top: 5px solid var(--primary); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .loader-text { margin-top: 15px; font-weight: bold; color: var(--primary); }
+
+        /* Navbar Bottom */
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card-bg); display: flex; justify-content: space-around; padding: 12px 2px 25px 2px; box-shadow: 0 -4px 15px rgba(0,0,0,0.05); z-index: 1000; border-top: 1px solid var(--border); }
+        .nav-item { text-align: center; color: var(--text-muted); cursor: pointer; flex: 1; transition: 0.3s; }
+        .nav-item i { font-size: 20px; margin-bottom: 5px; display: block; }
+        .nav-item span { font-size: 11px; font-weight: bold; }
+        .nav-item.active { color: var(--primary); transform: translateY(-3px); }
+
+        /* Page Layout */
+        .page-view { display: none; padding: 15px; animation: fadeIn 0.3s ease; }
+        .page-view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .header-title { background: var(--primary); color: white; padding: 25px 20px 20px; margin: -15px -15px 20px -15px; border-radius: 0 0 25px 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); font-size: 22px; font-weight: 900; display: flex; justify-content: space-between; align-items: center; }
+
+        /* Cards & UI */
+        .card { background: var(--card-bg); padding: 20px; border-radius: 16px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02); }
+        .card-header { font-size: 18px; color: var(--primary); font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid var(--bg); padding-bottom: 10px; display: flex; justify-content: space-between;}
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .stat-box { background: var(--bg); padding: 15px; text-align: center; border-radius: 12px; font-size: 14px; font-weight: bold; color: var(--text-muted); }
+        .stat-box .num { display: block; font-size: 24px; font-weight: 900; color: var(--primary); margin-top: 5px; }
+
+        /* Ledger & Badges */
+        .text-success { color: var(--success) !important; } .text-danger { color: var(--danger) !important; }
+        .transaction-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--bg); }
+        .batch-card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 15px; border-right: 5px solid var(--border); }
+        .badge { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; color: white; display: inline-block; }
+        .batch-actions { display: flex; gap: 10px; margin-top: 10px; }
+        .batch-actions button { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 15px; cursor: pointer; font-size: 16px; transition: 0.2s; }
+
+        /* Inputs & Buttons */
+        label { font-weight: bold; font-size: 14px; color: var(--text-muted); display: block; margin-top: 15px; margin-bottom: 8px; }
+        input, select { width: 100%; padding: 16px; border: 2px solid var(--border); border-radius: 10px; box-sizing: border-box; font-size: 16px; font-weight: bold; background: var(--bg); transition: 0.3s; }
+        input:focus, select:focus { border-color: var(--info); outline: none; background: #fff; }
+        button.btn { border: none; padding: 16px; border-radius: 12px; width: 100%; font-size: 18px; cursor: pointer; font-weight: bold; margin-top: 20px; color: white; display: flex; justify-content: center; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-info { background: var(--info); } .btn-warning { background: var(--warning); color: #000; }
+
+        /* Modals & Toast */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(3px); z-index: 2500; justify-content: center; align-items: flex-end; }
+        .modal-content { background: var(--card-bg); width: 100%; max-width: 500px; border-radius: 25px 25px 0 0; padding: 30px 20px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative;}
+        .close-modal { position: absolute; left: 20px; top: 20px; background: var(--bg); border: none; color: var(--danger); width: 35px; height: 35px; border-radius: 50%; font-size: 20px; cursor: pointer; }
+        #toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: white; padding: 15px 25px; border-radius: 30px; z-index: 3000; font-weight: bold; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 80%; }
+        
+        /* Quick Actions FAB */
+        .fab-container { position: fixed; bottom: 85px; right: 20px; z-index: 2000; }
+        .fab { background: var(--warning); color: #000; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; border: none; transition: 0.3s; }
+        .fab:active { transform: scale(0.9); }
+        .fab-menu { display: none; position: absolute; bottom: 70px; right: 0; background: var(--card-bg); border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.2); width: 180px; padding: 10px; flex-direction: column; gap: 10px; border: 1px solid var(--border); }
+        .fab-menu.active { display: flex; animation: slideUp 0.2s ease-out; }
+        .fab-btn { background: var(--bg); color: var(--text-main); padding: 12px; border-radius: 10px; font-size: 15px; text-align: right; display: flex; align-items: center; gap: 10px; border: none; cursor: pointer; font-weight: bold; width: 100%;}
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
-    <!-- شاشة التحميل -->
-    <div id="globalLoader">
-        <div class="spinner"></div>
-        <div class="loader-text">جاري المعالجة...</div>
-    </div>
-
+    <div id="globalLoader"><div class="spinner"></div><div class="loader-text">جاري المعالجة...</div></div>
+    
     <div id="toast"></div>
 
-    <!-- شريط التنقل السفلي -->
+    <div id="loginScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 10000; display: flex; justify-content: center; align-items: center; padding: 20px;">
+        <div class="card" style="width: 100%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+            <div style="font-size: 50px; margin-bottom: 15px;">🔐</div>
+            <h2 style="color: var(--primary); margin-top: 0; margin-bottom: 20px;">إدارة المزرعة</h2>
+            <label style="text-align: right; margin-top: 0;">البريد الإلكتروني</label>
+            <input type="email" id="emailInput" placeholder="example@email.com" style="margin-bottom: 15px; text-align: left;" dir="ltr">
+            <label style="text-align: right;">كلمة المرور</label>
+            <input type="password" id="passwordInput" placeholder="********" style="margin-bottom: 20px; text-align: left;" dir="ltr">
+            <button class="btn btn-primary" id="loginBtn" onclick="login()">تسجيل الدخول</button>
+            <p id="loginError" style="color: var(--danger); margin-top: 15px; font-size: 14px; font-weight: bold; display: none;"></p>
+        </div>
+    </div>
+
     <nav class="bottom-nav">
-        <!-- لاحظ أننا أزلنا onclick وأعطينا الأزرار data-page -->
         <div class="nav-item active" data-page="dashboard"><i class="fas fa-chart-pie"></i><span>الرئيسية</span></div>
         <div class="nav-item" data-page="incubator"><i class="fas fa-temperature-half"></i><span>تفريخ</span></div>
         <div class="nav-item" data-page="rearing"><i class="fas fa-kiwi-bird"></i><span>تربية</span></div>
@@ -44,9 +101,123 @@
         <div class="nav-item" data-page="settingsPage"><i class="fas fa-cog"></i><span>إعدادات</span></div>
     </nav>
 
-    <!-- احتفظ بجميع الـ div الخاصة بالصفحات (dashboard, incubator, etc...) والـ Modals هنا كما هي -->
+    <div class="fab-container">
+        <button class="fab" onclick="toggleFab()"><i class="fas fa-bolt"></i></button>
+        <div class="fab-menu" id="fabMenu">
+            <button class="fab-btn" onclick="openModal('modalDaily'); toggleFab()"><i class="fas fa-clipboard-list" style="color: var(--warning);"></i> علف/نافق</button>
+            <button class="fab-btn" onclick="openModal('modalSale'); toggleFab()"><i class="fas fa-shopping-cart" style="color: var(--success);"></i> بيع سريع</button>
+            <button class="fab-btn" onclick="openModal('modalBatch'); toggleFab()"><i class="fas fa-plus-circle" style="color: var(--info);"></i> دفعة جديدة</button>
+        </div>
+    </div>
 
-    <!-- استدعاء الملف الرئيسي كـ Module -->
+    <div id="dashboard" class="page-view active">
+        <div class="header-title"><span>لوحة القيادة</span></div>
+        <div class="card">
+            <div class="card-header">ملخص المزرعة</div>
+            <div class="grid-2">
+                <div class="stat-box">بالماكينة<span class="num" id="dashEggs">0</span></div>
+                <div class="stat-box">بالعنابر<span class="num" id="dashChicks">0</span></div>
+                <div class="stat-box" style="background:#e8f8f5;">بالفريزر<span class="num text-success" id="dashFreezer">0</span></div>
+                <div class="stat-box" style="background:#fef5e7;">مبيعات<span class="num text-warning" id="dashSales">0</span></div>
+            </div>
+        </div>
+        <div class="card" style="border-right: 4px solid var(--danger);">
+            <div class="card-header" style="color:var(--danger); border:none; margin:0; padding:0;"><i class="fas fa-exclamation-circle"></i> مهام وتنبيهات</div>
+            <div id="alertsContainer" style="margin-top: 15px; font-size: 14px; line-height: 1.6;">جاري التحميل...</div>
+        </div>
+    </div>
+
+    <div id="incubator" class="page-view">
+        <div class="header-title">إدارة التفريخ والمفقس</div>
+        <div id="incubatorList"></div>
+    </div>
+
+    <div id="rearing" class="page-view">
+        <div class="header-title">عنابر التربية والذبح</div>
+        <div id="rearingList"></div>
+        <div class="card-header text-danger" style="margin-top:20px;">قيد الذبح والتجهيز</div>
+        <div id="slaughterList"></div>
+    </div>
+
+    <div id="freezer" class="page-view">
+        <div class="header-title">المخزون والفريزر</div>
+        <div class="card">
+            <div class="card-header">الأرصدة الحالية الشاملة</div>
+            <div class="grid-2" id="freezerGrid"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">سجل الإيداعات (FIFO)</div>
+            <div id="freezerLogs"></div>
+        </div>
+    </div>
+
+    <div id="finance" class="page-view">
+        <div class="header-title">الماليات والنتائج</div>
+        <div class="card" style="background: var(--primary); color: white;">
+            <div style="text-align: center;">
+                <span style="font-size: 14px; opacity: 0.8;">صافي الربح العام</span>
+                <div style="font-size: 32px; font-weight: 900; margin: 10px 0;" id="netProfit">0 ج.م</div>
+            </div>
+            <div class="grid-2" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <div style="text-align: center;">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div>
+                <div style="text-align: center;">مصروفات<br><strong style="color:#ff7675; font-size: 18px;" id="totalExp">0</strong></div>
+            </div>
+            <button class="btn" style="background:rgba(255,255,255,0.2); margin-top:15px; font-size:14px;" onclick="openModal('modalExpense')">تسجيل مصروف جديد</button>
+        </div>
+        <div class="card">
+            <div class="card-header">بيان ختامي للدفعة (P&L)</div>
+            <select id="reportBatchSelect"></select>
+            <div id="batchReportContainer" style="margin-top: 15px; display: none;"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">سجل المعاملات</div>
+            <div id="ledgerList"></div>
+        </div>
+    </div>
+
+    <div id="settingsPage" class="page-view">
+        <div class="header-title">إعدادات النظام ⚙️</div>
+        <div class="card" style="border: 2px solid var(--info);">
+            <div class="card-header text-info">إعدادات القطيع</div>
+            <label>نوع الطائر الافتراضي للمزرعة</label>
+            <select id="setBirdType">
+                <option value="quail">سمان</option>
+                <option value="chicken">فراخ بيضاء</option>
+                <option value="turkey">رومي</option>
+            </select>
+        </div>
+        <div class="card">
+            <div class="card-header">أسعار التشغيل والبيع</div>
+            <label>سعر كيلو العلف (ج.م)</label><input type="number" id="setFeed" value="30">
+            <label>سعر جوز الرويال (ج.م)</label><input type="number" id="setRoyal" value="120">
+            <label>سعر جوز سوبر سبشيال (ج.م)</label><input type="number" id="setSuperSpecial" value="110">
+            <label>سعر جوز سبشيال (ج.م)</label><input type="number" id="setSpecial" value="100">
+            <label>سعر جوز جامبو (ج.م)</label><input type="number" id="setJumbo" value="90">
+            <label>سعر جوز سوبر (ج.م)</label><input type="number" id="setSuper" value="80">
+            <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات 💾</button>
+        </div>
+        <button class="btn btn-danger" onclick="logout()" style="margin-top: 20px;"><i class="fas fa-sign-out-alt"></i> تسجيل الخروج</button>
+    </div>
+
+    <div id="modalBatch" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')">×</button><h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم/كود الدفعة</label><input type="text" id="bName"><label>عدد البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول للماكينة</label><input type="date" id="bDate"><button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button></div>
+    </div>
+    <div id="modalDaily" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')">×</button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف (ك)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ السجل</button></div>
+    </div>
+    <div id="modalSale" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalSale')">×</button><h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3><label>الصنف</label><select id="sGrade" onchange="calculateSaleTotal()"><option value="royal">رويال</option><option value="super_special">سوبر سبشيال</option><option value="special">سبشيال</option><option value="jumbo">جامبو</option><option value="super">سوبر</option><option value="bad">كسر / فرز</option></select><label>العدد (جوز)</label><input type="number" id="sQty" oninput="calculateSaleTotal()"><div style="background:var(--bg); padding:15px; border-radius:10px; margin-top:15px; text-align:center;"><span style="color:var(--text-muted); font-size:14px;">إجمالي المطلوب</span><div id="saleTotalDisplay" style="font-size:30px; font-weight:900; color:var(--success);">0 ج.م</div></div><button class="btn btn-success" onclick="processSale()">تأكيد البيع</button></div>
+    </div>
+    <div id="modalExpense" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')">×</button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف</h3><label>المبلغ</label><input type="number" id="eAmount"><label>بند الصرف</label><input type="text" id="eType"><label>تحميل على دفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div>
+    </div>
+    <div id="modalHatch" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalHatch')">×</button><h3 style="margin-top: 0;">🐣 إتمام الفقس</h3><input type="hidden" id="hatchBatchId"><label>كتاكيت سليمة</label><input type="number" id="hHealthy" style="font-size: 24px; color: var(--success);"><div class="grid-2"><div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div><div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div></div><button class="btn btn-primary" onclick="moveToRearing()">نقل للتربية</button></div>
+    </div>
+    <div id="modalClassify" class="modal-overlay">
+        <div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')">×</button><h3 style="margin-top: 0;">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء وتخزين بالفريزر</button></div>
+    </div>
+
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
