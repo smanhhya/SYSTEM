@@ -217,6 +217,14 @@
     <div id="modalClassify" class="modal-overlay">
         <div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')">×</button><h3 style="margin-top: 0;">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء وتخزين بالفريزر</button></div>
     </div>
+    <script>
+        window.onerror = function(msg, url, line) {
+            alert("🚨 خطأ برمجى:\n" + msg + "\nالملف: " + url + "\nالسطر: " + line);
+        };
+        window.addEventListener('unhandledrejection', function(e) {
+            alert("🚨 خطأ في الربط:\n" + (e.reason ? e.reason.message : "مشكلة في تحميل ملف"));
+        });
+    </script>
 
     <script type="module" src="js/main.js"></script>
 </body>
