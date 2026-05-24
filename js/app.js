@@ -1,13 +1,14 @@
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
 
+// ================= 1. المتغيرات العامة =================
 let allBatches = {};
 let allTransactions = {};
 let allFreezerLogs = {};
 let manualCash = 0; 
-let currentFeedStock = 0; // متغير المخزن
+let currentFeedStock = 0; 
+let dynamicFreezerConfig = {};
 
-// الأيقونات والأسماء لتوضيح النوع بلمحة بصرية
 const birdStandards = {
     quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 35 },
     chicken: { name: 'فراخ بيضاء', icon: '🐔', hatcher: 18, hatch: 21, slaughter: 40 },
@@ -15,29 +16,74 @@ const birdStandards = {
 };
 
 let globalSettings = { 
-    birdType: 'quail', feedPrice: 30, royal: 120, super_special: 110, special: 100, jumbo: 90, super: 80, bad: 0,
-    quailChick: 3.5, chickenChick: 25, turkeyChick: 60, turkeyEgg: 10 
+    birdType: 'quail', feedPrice: 30, quailChick: 3.5, chickenChick: 25, turkeyChick: 60, turkeyEgg: 10 
 };
-const gradeNames = { royal: 'رويال', super_special: 'سوبر سبشيال', special: 'سبشيال', jumbo: 'جامبو', super: 'سوبر', bad: 'كسر/فرز' };
 
-// حل مشكلة التبديل الآمن بين الصفحات
+// ================= 2. التبديل والواجهة (UI) =================
 window.switchPage = (pageId) => {
     const e = window.event;
     switchPage(pageId, e ? e.currentTarget : null);
 };
-// التبديل بين تبويبات الإعدادات
+
 window.switchSettingsTab = (tabId, element) => {
-    // إزالة الأكتيف من كل الزراير والتبويبات
     document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.settings-tab').forEach(el => el.classList.remove('active'));
-    
-    // إضافة الأكتيف للزرار والتبويب المطلوب
     element.classList.add('active');
     document.getElementById(`tab-${tabId}`).classList.add('active');
 };
-// ================= إعدادات المظهر والـ Themes =================
 
-// تطبيق الإعدادات المحفوظة أول ما الموقع يفتح
+window.closeModal = closeModal;
+window.toggleFab = toggleFab;
+window.showToast = showToast;
+
+// دالة حساب التواريخ أوتوماتيكياً في المفرخ
+window.autoCalcDates = () => {
+    const type = document.getElementById('bBirdType').value;
+    const dateStr = document.getElementById('bDate').value;
+    if(!dateStr) return;
+    
+    const std = birdStandards[type] || birdStandards['quail'];
+    const insertD = new Date(dateStr);
+    
+    const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+    const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+    
+    let slDays = parseInt(document.getElementById('bSlaughterDays')?.value);
+    if(!slDays || slDays < 1) slDays = std.slaughter;
+    
+    const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (slDays * 24));
+    
+    const formatForInput = (d) => {
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    
+    const elHatcher = document.getElementById('bHatcherDate');
+    const elHatch = document.getElementById('bHatchDate');
+    const elSlaughter = document.getElementById('bSlaughterDate');
+    
+    if(elHatcher) elHatcher.value = formatForInput(hatcherD);
+    if(elHatch) elHatch.value = formatForInput(hatchD);
+    if(elSlaughter) elSlaughter.value = formatForInput(rearD);
+};
+
+// تعديل فتح النوافذ لدعم الحساب التلقائي
+window.openModal = (id) => {
+    if(id === 'modalBatch') {
+        const typeEl = document.getElementById('bBirdType');
+        if(typeEl) typeEl.value = globalSettings.birdType || 'quail';
+        const dateEl = document.getElementById('bDate');
+        if(dateEl) {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            dateEl.value = now.toISOString().slice(0,16);
+        }
+        setTimeout(window.autoCalcDates, 50); 
+    } 
+    openModal(id);
+};
+
+// ================= 3. المظهر والألوان =================
 const savedTheme = localStorage.getItem('erp_theme') || 'light';
 const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
 document.documentElement.setAttribute('data-theme', savedTheme);
@@ -46,35 +92,24 @@ document.documentElement.style.setProperty('--primary', savedColor);
 window.setThemeMode = (mode, el) => {
     document.documentElement.setAttribute('data-theme', mode);
     localStorage.setItem('erp_theme', mode);
-    
-    // تحديث شكل الأزرار (Active state)
     if(el) {
-        const siblings = el.parentElement.querySelectorAll('.theme-option');
-        siblings.forEach(s => s.classList.remove('active'));
+        el.parentElement.querySelectorAll('.theme-option').forEach(s => s.classList.remove('active'));
         el.classList.add('active');
     }
-    
-    // إعادة رسم الرسم البياني في الداشبورد عشان ألوانه تتحدث مع الـ Dark Mode!
     if(window.renderDashboardChart) window.renderDashboardChart(); 
-    
     showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
 };
 
 window.setPrimaryColor = (color, el) => {
     document.documentElement.style.setProperty('--primary', color);
     localStorage.setItem('erp_primary_color', color);
-    
-    // تحديث شكل الدوائر (Active state)
     if(el) {
-        const siblings = el.parentElement.querySelectorAll('.color-circle');
-        siblings.forEach(s => s.classList.remove('active'));
+        el.parentElement.querySelectorAll('.color-circle').forEach(s => s.classList.remove('active'));
         el.classList.add('active');
     }
-    
     showToast("تم تغيير لون النظام بنجاح 🎨");
 };
 
-// تظبيط الـ Active Classes عند فتح صفحة الإعدادات
 document.addEventListener('DOMContentLoaded', () => {
     if(savedTheme === 'dark') {
         const darkBtn = document.querySelectorAll('.theme-option')[1];
@@ -85,25 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-window.openModal = (id) => {
-    if(id === 'modalBatch') {
-        const typeEl = document.getElementById('bBirdType');
-        if(typeEl) typeEl.value = globalSettings.birdType || 'quail';
-        
-        const dateEl = document.getElementById('bDate');
-        if(dateEl) {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            dateEl.value = now.toISOString().slice(0,16);
-        }
-    } 
-    openModal(id);
-};
-window.closeModal = closeModal;
-window.toggleFab = toggleFab;
-window.showToast = showToast;
-
-// ================= مراقبة مخزن العلف =================
+// ================= 4. إدارة الخزنة والمخازن =================
 onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
     const feedEl = document.getElementById('feedStockDisplay');
@@ -111,26 +128,16 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     if(Object.keys(allBatches).length > 0) renderBatches();
 });
 
-// ================= شراء وتوريد العلف =================
 window.buyFeed = async () => {
-    const qtyEl = document.getElementById('bfQty');
-    const costEl = document.getElementById('bfTotalCost');
-    const qty = qtyEl ? parseFloat(qtyEl.value) : 0;
-    const cost = costEl ? parseFloat(costEl.value) : 0;
-    
+    const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
+    const cost = parseFloat(document.getElementById('bfTotalCost')?.value) || 0;
     if(!qty || !cost) return showToast("برجاء إدخال الكمية والتكلفة", true);
-
     await set(ref(db, "inventory/feedStock"), currentFeedStock + qty);
     await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `شراء وتوريد علف للمخزن (${qty} كجم)`, batchId: 'general', date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
     await set(ref(db, "cashBox"), manualCash - cost);
-
-    if(qtyEl) qtyEl.value = ''; 
-    if(costEl) costEl.value = '';
-    closeModal('modalBuyFeed');
-    showToast(`تم إضافة ${qty} كجم للمخزن وخصم ${cost} ج.م`);
+    closeModal('modalBuyFeed'); showToast(`تم إضافة ${qty} كجم للمخزن وخصم ${cost} ج.م`);
 };
 
-// ================= الخزنة والكاش =================
 onValue(ref(db, "cashBox"), (snapshot) => {
     manualCash = snapshot.exists() ? snapshot.val() : 0;
     updateCashDisplay();
@@ -139,18 +146,13 @@ onValue(ref(db, "cashBox"), (snapshot) => {
 function updateCashDisplay() {
     const netProfitEl = document.getElementById('netProfit');
     if (!netProfitEl) return;
-    
     let cashBoxEl = document.getElementById('customCashBoxDisplay');
     if (!cashBoxEl) {
         const parent = netProfitEl.parentElement;
         const container = document.createElement('div');
         container.id = 'customCashBox';
         container.style.marginTop = '15px'; container.style.paddingTop = '12px'; container.style.borderTop = '1px dashed var(--border)'; container.style.textAlign = 'center';
-        container.innerHTML = `
-            <span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span>
-            <div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div>
-            <button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; transition: var(--transition-smooth);"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>
-        `;
+        container.innerHTML = `<span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span><div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div><button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold;"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>`;
         parent.appendChild(container);
         cashBoxEl = document.getElementById('customCashBoxDisplay');
     }
@@ -164,17 +166,11 @@ window.editCashBox = async () => {
     }
 };
 
-// ================= الإعدادات =================
 onValue(ref(db, "settings"), (snapshot) => {
     if(snapshot.exists()) {
         globalSettings = { ...globalSettings, ...snapshot.val() };
         if(document.getElementById('setBirdType')) document.getElementById('setBirdType').value = globalSettings.birdType || 'quail';
         if(document.getElementById('setFeed')) document.getElementById('setFeed').value = globalSettings.feedPrice;
-        if(document.getElementById('setRoyal')) document.getElementById('setRoyal').value = globalSettings.royal;
-        if(document.getElementById('setSuperSpecial')) document.getElementById('setSuperSpecial').value = globalSettings.super_special;
-        if(document.getElementById('setSpecial')) document.getElementById('setSpecial').value = globalSettings.special;
-        if(document.getElementById('setJumbo')) document.getElementById('setJumbo').value = globalSettings.jumbo;
-        if(document.getElementById('setSuper')) document.getElementById('setSuper').value = globalSettings.super;
         if(document.getElementById('setQuailChick')) document.getElementById('setQuailChick').value = globalSettings.quailChick || 3.5;
         if(document.getElementById('setChickenChick')) document.getElementById('setChickenChick').value = globalSettings.chickenChick || 25;
         if(document.getElementById('setTurkeyChick')) document.getElementById('setTurkeyChick').value = globalSettings.turkeyChick || 60;
@@ -186,197 +182,179 @@ window.saveSettings = async () => {
     const newSet = {
         birdType: document.getElementById('setBirdType')?.value || 'quail',
         feedPrice: parseFloat(document.getElementById('setFeed')?.value) || 0,
-        royal: parseFloat(document.getElementById('setRoyal')?.value) || 0,
-        super_special: parseFloat(document.getElementById('setSuperSpecial')?.value) || 0,
-        special: parseFloat(document.getElementById('setSpecial')?.value) || 0,
-        jumbo: parseFloat(document.getElementById('setJumbo')?.value) || 0,
-        super: parseFloat(document.getElementById('setSuper')?.value) || 0,
         quailChick: parseFloat(document.getElementById('setQuailChick')?.value) || 3.5,
         chickenChick: parseFloat(document.getElementById('setChickenChick')?.value) || 25,
         turkeyChick: parseFloat(document.getElementById('setTurkeyChick')?.value) || 60,
         turkeyEgg: parseFloat(document.getElementById('setTurkeyEgg')?.value) || 10,
-        bad: 0
     };
     await set(ref(db, 'settings'), newSet); showToast("تم حفظ الإعدادات بنجاح");
 };
 
-// ================= إدارة الدفعات =================
+// ================= 5. إدارة الدفعات والتواريخ =================
 window.saveNewBatch = async () => {
-    const nameEl = document.getElementById('bName');
-    const eggsEl = document.getElementById('bEggs');
-    const dateEl = document.getElementById('bDate');
-    const typeEl = document.getElementById('bBirdType');
+    const name = document.getElementById('bName')?.value || '';
+    const eggs = parseInt(document.getElementById('bEggs')?.value) || 0;
+    const datetimeStr = document.getElementById('bDate')?.value || ''; 
+    const bType = document.getElementById('bBirdType')?.value || 'quail';
     
-    const name = nameEl ? nameEl.value : '';
-    const eggs = eggsEl ? parseInt(eggsEl.value) : 0;
-    const datetimeStr = dateEl ? dateEl.value : ''; 
-    const bType = typeEl ? typeEl.value : 'quail';
+    const hatcherD = document.getElementById('bHatcherDate')?.value;
+    const hatchD = document.getElementById('bHatchDate')?.value;
+    const rearD = document.getElementById('bSlaughterDate')?.value;
     
-    if(!name || !eggs || !datetimeStr) return showToast("أكمل البيانات", true);
-
-    const std = birdStandards[bType];
-    const insertD = new Date(datetimeStr);
-    
-    const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-    const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-    const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
-
-    const orderIndex = Date.now();
+    if(!name || !eggs || !datetimeStr || !hatcherD || !hatchD || !rearD) return showToast("أكمل البيانات والتواريخ المتوقعة", true);
 
     await push(ref(db, 'batches'), { 
         name, birdType: bType, 
         insertDate: datetimeStr, 
-        hatcherDate: hatcherD.toISOString(), 
-        hatchDate: hatchD.toISOString(), 
-        rearDate: rearD.toISOString(), 
+        hatcherDate: new Date(hatcherD).toISOString(), 
+        hatchDate: new Date(hatchD).toISOString(), 
+        rearDate: new Date(rearD).toISOString(), 
         initialEggs: eggs, status: 'incubator', totalDead: 0, totalFeed: 0,
-        order: orderIndex
+        order: Date.now()
     });
     
-    if(nameEl) nameEl.value = ''; 
-    if(eggsEl) eggsEl.value = '';
-    closeModal('modalBatch'); showToast(`تم تسجيل الدفعة بدقة`);
+    closeModal('modalBatch'); showToast(`تم تسجيل الدفعة وتحديد مواعيدها`);
+};
+
+window.openEditBatch = (id) => {
+    const b = allBatches[id];
+    document.getElementById('editBatchId').value = id;
+    document.getElementById('editBName').value = b.name;
+    document.getElementById('editBEggs').value = b.initialEggs;
+    if(b.insertDate) document.getElementById('editBDate').value = b.insertDate;
+    openModal('modalEditBatch');
+};
+
+window.saveEditBatch = async () => {
+    const id = document.getElementById('editBatchId').value;
+    const b = allBatches[id];
+    const newName = document.getElementById('editBName').value;
+    const newEggs = parseInt(document.getElementById('editBEggs').value);
+    const newDateStr = document.getElementById('editBDate').value;
+    
+    if(!newName || !newEggs || !newDateStr) return showToast("أكمل البيانات", true);
+
+    const std = birdStandards[b.birdType || 'quail'];
+    const insertD = new Date(newDateStr);
+    const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+    const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+    const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+
+    await update(ref(db, `batches/${id}`), { name: newName, initialEggs: newEggs, insertDate: newDateStr, hatcherDate: hatcherD.toISOString(), hatchDate: hatchD.toISOString(), rearDate: rearD.toISOString() });
+    closeModal('modalEditBatch'); showToast("تم تحديث الدفعة وإعادة حساب التواريخ");
 };
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
     const eggPrice = batch.birdType === 'turkey' ? (globalSettings.turkeyEgg || 10) : (batch.birdType === 'chicken' ? 15 : 2);
-    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟ (سعر البيضة المحسوب: ${eggPrice} ج.م)`, "0");
-    
+    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟ (السعر: ${eggPrice} ج.م)`, "0");
     if(qty && !isNaN(qty) && parseInt(qty) > 0) {
         const sellQty = parseInt(qty);
         if(sellQty > batch.initialEggs) return showToast("العدد أكبر من المتاح!", true);
-        
         const totalAmount = sellQty * eggPrice;
         await update(ref(db, `batches/${batchId}`), { initialEggs: batch.initialEggs - sellQty });
-        await push(ref(db, 'ledger'), { type: 'in', amount: totalAmount, desc: `بيع بيض (${sellQty} بيضة) - ${batch.name}`, batchId: batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+        await push(ref(db, 'ledger'), { type: 'in', amount: totalAmount, desc: `بيع بيض (${sellQty}) - ${batch.name}`, batchId: batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
         await set(ref(db, "cashBox"), manualCash + totalAmount);
-        
         showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م`);
     }
 };
 
 window.moveBatchUp = async (id) => {
-    const batchesArr = Object.keys(allBatches).map(key => ({ id: key, ...allBatches[key] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const batchesArr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
     const currentIndex = batchesArr.findIndex(b => b.id === id);
     if(currentIndex > 0) {
-        const prevBatch = batchesArr[currentIndex - 1];
-        const tempOrder = prevBatch.order;
-        await update(ref(db, `batches/${prevBatch.id}`), { order: batchesArr[currentIndex].order });
-        await update(ref(db, `batches/${id}`), { order: tempOrder });
+        await update(ref(db, `batches/${batchesArr[currentIndex - 1].id}`), { order: batchesArr[currentIndex].order });
+        await update(ref(db, `batches/${id}`), { order: batchesArr[currentIndex - 1].order });
     }
 };
 
 window.moveBatchDown = async (id) => {
-    const batchesArr = Object.keys(allBatches).map(key => ({ id: key, ...allBatches[key] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const batchesArr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
     const currentIndex = batchesArr.findIndex(b => b.id === id);
     if(currentIndex < batchesArr.length - 1) {
-        const nextBatch = batchesArr[currentIndex + 1];
-        const tempOrder = nextBatch.order;
-        await update(ref(db, `batches/${nextBatch.id}`), { order: batchesArr[currentIndex].order });
-        await update(ref(db, `batches/${id}`), { order: tempOrder });
+        await update(ref(db, `batches/${batchesArr[currentIndex + 1].id}`), { order: batchesArr[currentIndex].order });
+        await update(ref(db, `batches/${id}`), { order: batchesArr[currentIndex + 1].order });
     }
-};
-
-// ================= العمليات اليومية والمبيعات =================
-window.saveDailyLog = async () => {
-    const idEl = document.getElementById('dBatch');
-    const deadEl = document.getElementById('dDead');
-    const feedEl = document.getElementById('dFeed');
-    
-    const id = idEl ? idEl.value : null;
-    const dead = deadEl ? (parseInt(deadEl.value) || 0) : 0;
-    const feed = feedEl ? (parseFloat(feedEl.value) || 0) : 0;
-    
-    if(!id || (dead===0 && feed===0)) return showToast("أدخل بيانات صحيحة", true);
-
-    const b = allBatches[id]; const today = new Date().toISOString().split('T')[0];
-
-    await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
-
-    if(feed > 0) {
-        if(currentFeedStock < feed) {
-            alert(`⚠️ تحذير: رصيد المخزن (${currentFeedStock} ك) لا يكفي لهذه الوجبة! الرجاء شراء علف أولاً.`);
-            return;
-        }
-        await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
-        const cost = feed * (globalSettings.feedPrice || 30);
-        await push(ref(db, 'ledger'), { type: 'batch_cost', amount: cost, desc: `سحب علف من المخزن (${feed}ك)`, batchId: id, date: today, timestamp: Date.now() });
-    }
-
-    await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
-    if(deadEl) deadEl.value = 0; 
-    if(feedEl) feedEl.value = 0;
-    closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك وخصمه من المخزن");
-};
-
-window.calculateSaleTotal = () => {
-    const gradeEl = document.getElementById('sGrade');
-    const qtyEl = document.getElementById('sQty');
-    const displayEl = document.getElementById('saleTotalDisplay');
-    
-    const grade = gradeEl ? gradeEl.value : ''; 
-    const qty = qtyEl ? (parseInt(qtyEl.value) || 0) : 0;
-    if(displayEl) displayEl.innerText = (qty * (globalSettings[grade] || 0)) + " ج.م";
-};
-
-window.processSale = async () => {
-    const gradeEl = document.getElementById('sGrade');
-    const qtyEl = document.getElementById('sQty');
-    
-    const grade = gradeEl ? gradeEl.value : ''; 
-    const qty = qtyEl ? (parseInt(qtyEl.value) || 0) : 0;
-    const amount = qty * (globalSettings[grade] || 0);
-    
-    if(!qty) return showToast("أدخل العدد", true);
-
-    const snap = await get(ref(db, `inventory/freezer/${grade}`));
-    const currentStock = snap.exists() ? snap.val() : 0;
-    if(currentStock < qty) return showToast(`الرصيد لا يكفي! المتاح: ${currentStock}`, true);
-
-    await set(ref(db, `inventory/freezer/${grade}`), currentStock - qty);
-    await saveTransaction('in', amount, `مبيعات (${qty} جوز - ${gradeNames[grade]})`);
-    
-    if(qtyEl) qtyEl.value = ''; 
-    const displayEl = document.getElementById('saleTotalDisplay');
-    if(displayEl) displayEl.innerText = "0 ج.م"; 
-    closeModal('modalSale'); showToast("تم البيع بنجاح");
-};
-
-window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
-    const amountEl = document.getElementById('eAmount');
-    const typeEl = document.getElementById('eType');
-    const batchEl = document.getElementById('eBatch');
-    
-    const amount = amountOverride || (amountEl ? parseFloat(amountEl.value) : 0);
-    const desc = descOverride || (typeEl ? typeEl.value : '');
-    const batchId = (type === 'out' && batchEl) ? batchEl.value : 'general';
-    
-    if(!amount) return showToast("أدخل المبلغ", true);
-
-    await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
-    if (type === 'in') await set(ref(db, "cashBox"), manualCash + amount);
-    else if (type === 'out') await set(ref(db, "cashBox"), manualCash - amount); 
-
-    if(!amountOverride) { 
-        if(amountEl) amountEl.value = ''; 
-        if(typeEl) typeEl.value = ''; 
-        closeModal('modalExpense'); showToast("تم التسجيل بالدفتر"); 
-    }
-};
-
-window.renameBatch = async (id) => {
-    const currentName = allBatches[id].name; const newName = prompt("الاسم الجديد للدفعة:", currentName);
-    if (newName && newName.trim() !== "" && newName !== currentName) { await update(ref(db, `batches/${id}`), { name: newName.trim() }); showToast("تم التغيير"); }
 };
 
 window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
 
+window.updateStage = async (id, stage) => { 
+    if (stage === 'slaughter' && !confirm("⚠️ نقل الدفعة للذبح؟ لا يمكن التراجع بسهولة!")) return;
+    await update(ref(db, `batches/${id}`), { status: stage }); showToast("تم تحديث الحالة بنجاح");
+};
+
+window.promptHatch = (id) => { 
+    const el = document.getElementById('hatchBatchId'); if(el) el.value = id; 
+    openModal('modalHatch'); 
+};
+
+window.moveToRearing = async () => {
+    const id = document.getElementById('hatchBatchId')?.value;
+    const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
+    const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
+    if(!id || !healthy) return showToast("أدخل العدد الصحيح", true);
+    
+    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
+    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate, rearingSystem: rearingSys, unfertilized: parseInt(document.getElementById('hUnfert')?.value)||0, deadInShell: parseInt(document.getElementById('hDead')?.value)||0 });
+    closeModal('modalHatch'); showToast("تم النقل للتربية");
+};
+
+// ================= 6. المبيعات والمصروفات =================
+window.saveDailyLog = async () => {
+    const id = document.getElementById('dBatch')?.value;
+    const dead = parseInt(document.getElementById('dDead')?.value) || 0;
+    const feed = parseFloat(document.getElementById('dFeed')?.value) || 0;
+    if(!id || (dead===0 && feed===0)) return showToast("أدخل بيانات صحيحة", true);
+
+    const b = allBatches[id]; const today = new Date().toISOString().split('T')[0];
+    await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
+
+    if(feed > 0) {
+        if(currentFeedStock < feed) return alert(`⚠️ الرصيد (${currentFeedStock} ك) لا يكفي!`);
+        await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
+        await push(ref(db, 'ledger'), { type: 'batch_cost', amount: feed * (globalSettings.feedPrice || 30), desc: `سحب علف (${feed}ك)`, batchId: id, date: today, timestamp: Date.now() });
+    }
+    await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
+    closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك");
+};
+
+window.calculateSaleTotal = () => {
+    const grade = document.getElementById('sGrade')?.value;
+    const qty = parseInt(document.getElementById('sQty')?.value) || 0;
+    if(document.getElementById('saleTotalDisplay')) document.getElementById('saleTotalDisplay').innerText = (qty * (dynamicFreezerConfig[grade]?.price || 0)) + " ج.م";
+};
+
+window.processSale = async () => {
+    const grade = document.getElementById('sGrade')?.value;
+    const qty = parseInt(document.getElementById('sQty')?.value) || 0;
+    if(!grade || !qty) return showToast("أدخل بيانات البيع", true);
+
+    const amount = qty * (dynamicFreezerConfig[grade]?.price || 0);
+    const snap = await get(ref(db, `inventory/freezerStock/${grade}`));
+    const currentStock = snap.exists() ? snap.val() : 0;
+    if(currentStock < qty) return showToast(`الرصيد لا يكفي! المتاح: ${currentStock}`, true);
+
+    await set(ref(db, `inventory/freezerStock/${grade}`), currentStock - qty);
+    await saveTransaction('in', amount, `مبيعات (${qty} جوز - ${dynamicFreezerConfig[grade].name})`);
+    closeModal('modalSale'); showToast("تم البيع بنجاح");
+};
+
+window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
+    const amount = amountOverride || parseFloat(document.getElementById('eAmount')?.value);
+    const desc = descOverride || document.getElementById('eType')?.value;
+    const batchId = (type === 'out') ? (document.getElementById('eBatch')?.value || 'general') : 'general';
+    if(!amount) return showToast("أدخل المبلغ", true);
+
+    await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+    await set(ref(db, "cashBox"), manualCash + (type === 'in' ? amount : -amount));
+    if(!amountOverride) { closeModal('modalExpense'); showToast("تم التسجيل"); }
+};
+
 window.deleteTransaction = async (id) => {
     if(confirm("حذف هذه المعاملة؟")) {
         const t = allTransactions[id];
-        if (t.type === 'in') await set(ref(db, "cashBox"), manualCash - t.amount);
-        else if (t.type === 'out') await set(ref(db, "cashBox"), manualCash + t.amount);
+        await set(ref(db, "cashBox"), manualCash + (t.type === 'in' ? -t.amount : t.amount));
         await remove(ref(db, `ledger/${id}`)); showToast("تم الحذف وتعديل الخزنة");
     }
 };
@@ -389,114 +367,91 @@ window.resetSystem = async () => {
     }
 };
 
-window.updateStage = async (id, stage) => { 
-    if (stage === 'slaughter') {
-        if (!confirm("⚠️ هل أنت متأكد؟ هذا الإجراء سينقل الدفعة لمرحلة الذبح ولا يمكن التراجع عنه بسهولة!")) {
-            return; 
-        }
-    }
-    await update(ref(db, `batches/${id}`), { status: stage }); 
-    showToast("تم تحديث حالة الدفعة بنجاح");
-};
-
-window.promptHatch = (id) => { 
-    const hatchIdEl = document.getElementById('hatchBatchId');
-    if(hatchIdEl) hatchIdEl.value = id; 
-    openModal('modalHatch'); 
-};
-
-// حل الحماية المتوقع لو العنصر مش موجود في الـ HTML
-window.moveToRearing = async () => {
-    const hatchIdEl = document.getElementById('hatchBatchId');
-    const id = hatchIdEl ? hatchIdEl.value : null;
-    if(!id) return;
-    
-    const healthyEl = document.getElementById('hHealthy');
-    const healthy = healthyEl ? parseInt(healthyEl.value) : 0;
-    
-    const rearingSysEl = document.getElementById('hRearingSystem');
-    const rearingSys = rearingSysEl ? rearingSysEl.value : 'floor'; // تأمين لو الـ Select مش موجود
-    
-    if(!healthy) return showToast("أدخل العدد", true);
-    
-    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
-    const unfertEl = document.getElementById('hUnfert');
-    const deadEl = document.getElementById('hDead');
-
-    await update(ref(db, `batches/${id}`), { 
-        status: 'rearing', 
-        hatchedChicks: healthy, 
-        hatchRate: hatchRate, 
-        rearingSystem: rearingSys, 
-        unfertilized: unfertEl ? (parseInt(unfertEl.value)||0) : 0, 
-        deadInShell: deadEl ? (parseInt(deadEl.value)||0) : 0 
-    });
-    closeModal('modalHatch'); showToast("تم النقل للتربية");
-};
-
+// ================= 7. كابينة الذبح الفائقة (Slaughter Cockpit) =================
+let activeCockpitBatchId = null;
 
 window.promptClassify = (id) => { 
-    const classIdEl = document.getElementById('classBatchId');
-    if(classIdEl) classIdEl.value = id; 
-    openModal('modalClassify'); 
-};
-
-window.finishSlaughter = async () => {
-    const classIdEl = document.getElementById('classBatchId');
-    const id = classIdEl ? classIdEl.value : null;
-    if(!id) return;
+    activeCockpitBatchId = id;
+    document.getElementById('cockpitBatchName').innerText = `دفعة: ${allBatches[id].name}`;
+    const grid = document.getElementById('cockpitInputsGrid');
+    grid.innerHTML = '';
     
-    let yieldTotal = 0; const toAdd = {};
-    Object.keys(gradeNames).forEach(g => { 
-        const inputEl = document.getElementById(`c_${g}`);
-        const val = inputEl ? (parseInt(inputEl.value) || 0) : 0; 
-        toAdd[g] = val; 
-        if(g !== 'bad') yieldTotal += val; 
+    const ids = Object.keys(dynamicFreezerConfig);
+    if(ids.length === 0) return alert("الرجاء إضافة أصناف للفريزر من الإعدادات أولاً!");
+
+    ids.forEach((catId, index) => {
+        grid.innerHTML += `<div class="cockpit-input-card">
+            <span style="font-size: 16px; color: var(--text-secondary);">${dynamicFreezerConfig[catId].name}</span>
+            <input type="number" id="cockpit_in_${catId}" data-index="${index}" value="0" oninput="calculateCockpitTotal()" onclick="this.select()">
+        </div>`;
     });
-    
-    if(yieldTotal === 0 && toAdd['bad'] === 0) return showToast("أدخل ناتج التصنيف", true);
 
-    const snap = await get(ref(db, "inventory/freezer")); let currentF = snap.exists() ? snap.val() : {};
-    Object.keys(toAdd).forEach(g => currentF[g] = (currentF[g]||0) + toAdd[g]);
-    await set(ref(db, "inventory/freezer"), currentF);
-    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, birdType: allBatches[id].birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
-    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
-    closeModal('modalClassify'); showToast("تم الترحيل للفريزر");
+    document.getElementById('slaughterCockpit').style.display = 'flex';
+    document.getElementById('cockpitTotalDisplay').innerText = '0';
+
+    setTimeout(() => {
+        const firstInput = document.querySelector('#cockpitInputsGrid input');
+        if(firstInput) firstInput.focus();
+        document.querySelectorAll('#cockpitInputsGrid input').forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const nextInput = document.querySelector(`#cockpitInputsGrid input[data-index="${parseInt(input.getAttribute('data-index')) + 1}"]`);
+                    if(nextInput) nextInput.focus(); else document.querySelector('.cockpit-footer button').focus();
+                }
+            });
+        });
+    }, 200);
 };
 
-// ================= عرض البيانات (داشبورد مدمج آمن) =================
+window.closeSlaughterCockpit = () => { document.getElementById('slaughterCockpit').style.display = 'none'; activeCockpitBatchId = null; };
+
+window.calculateCockpitTotal = () => {
+    let total = 0; document.querySelectorAll('#cockpitInputsGrid input').forEach(inp => total += parseInt(inp.value) || 0);
+    document.getElementById('cockpitTotalDisplay').innerText = total;
+};
+
+window.submitSlaughterCockpit = async () => {
+    if(!activeCockpitBatchId) return;
+    const id = activeCockpitBatchId; let yieldTotal = 0; const toAdd = {};
+    
+    Object.keys(dynamicFreezerConfig).forEach(catId => {
+        const val = parseInt(document.getElementById(`cockpit_in_${catId}`).value) || 0;
+        toAdd[catId] = val; yieldTotal += val;
+    });
+
+    if(yieldTotal === 0 && !confirm("⚠️ ترحيل بأرقام صفرية؟")) return;
+
+    const stockSnap = await get(ref(db, "inventory/freezerStock"));
+    let currentStock = stockSnap.exists() ? stockSnap.val() : {};
+    Object.keys(toAdd).forEach(catId => currentStock[catId] = (currentStock[catId] || 0) + toAdd[catId]);
+    
+    await set(ref(db, "inventory/freezerStock"), currentStock);
+    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
+    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
+
+    closeSlaughterCockpit(); showToast(`🚀 تم تجميد ${yieldTotal} طائر!`);
+};
+
+// ================= 8. رندر الداشبورد والإشعارات الذكية =================
 onValue(ref(db, "batches"), (snapshot) => { 
     allBatches = snapshot.exists() ? snapshot.val() : {}; 
     renderBatches(); 
-    const reportSelect = document.getElementById('reportBatchSelect');
-    if(reportSelect && reportSelect.value) window.generateBatchReport(); 
+    if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
 });
 
 function formatDateTime(isoString) {
     if(!isoString) return '-';
     const date = new Date(isoString);
-    const d = date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
-    const t = date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute:'2-digit' });
-    return `${d} (${t})`;
+    const pad = n => n.toString().padStart(2, '0');
+    return `${date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })} (${pad(date.getHours())}:${pad(date.getMinutes())})`;
 }
 
-// دالة العرض بعد تأمين جميع العناصر
 function renderBatches() {
-    const ui = { 
-        inc: document.getElementById('incubatorList'), 
-        rear: document.getElementById('rearingList'), 
-        slaugh: document.getElementById('slaughterList'), 
-        alerts: document.getElementById('alertsContainer'), 
-        dSelect: document.getElementById('dBatch'), 
-        eSelect: document.getElementById('eBatch'), 
-        rSelect: document.getElementById('reportBatchSelect') 
-    };
+    const ui = { inc: document.getElementById('incubatorList'), rear: document.getElementById('rearingList'), slaugh: document.getElementById('slaughterList'), alerts: document.getElementById('alertsContainer'), dSelect: document.getElementById('dBatch'), eSelect: document.getElementById('eBatch'), rSelect: document.getElementById('reportBatchSelect') };
     
-    if(ui.inc) ui.inc.innerHTML = ''; 
-    if(ui.rear) ui.rear.innerHTML = ''; 
-    if(ui.slaugh) ui.slaugh.innerHTML = ''; 
-    if(ui.alerts) ui.alerts.innerHTML = ''; 
-    
+    if(!ui.inc) return;
+    ui.inc.innerHTML = ''; ui.rear.innerHTML = ''; ui.slaugh.innerHTML = ''; ui.alerts.innerHTML = ''; 
     if(ui.dSelect) ui.dSelect.innerHTML = ''; 
     if(ui.eSelect) ui.eSelect.innerHTML = '<option value="general">مصروف عام</option>'; 
     if(ui.rSelect) ui.rSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
@@ -507,43 +462,33 @@ function renderBatches() {
         ui.alerts.innerHTML += `<div style="color:var(--danger); font-weight:800; margin-bottom:12px; padding:10px; border:1px dashed var(--danger); border-radius:8px;"><i class="fas fa-triangle-exclamation"></i> تحذير عاجل: العلف بالمخزن أوشك على النفاذ (${currentFeedStock} كجم فقط)!</div>`;
     }
 
-    const sortedBatchIds = Object.keys(allBatches).sort((a,b) => (allBatches[b].order || 0) - (allBatches[a].order || 0));
-
-    sortedBatchIds.forEach(id => {
-        const b = allBatches[id];
-        const std = birdStandards[b.birdType || 'quail'];
-        const bTypeName = std?.name || 'طائر';
-        const bIcon = std?.icon || '🐣';
+    Object.keys(allBatches).sort((a,b) => (allBatches[b].order || 0) - (allBatches[a].order || 0)).forEach(id => {
+        const b = allBatches[id]; const std = birdStandards[b.birdType || 'quail']; const bTypeName = std?.name || 'طائر'; const bIcon = std?.icon || '🐣';
 
         if(ui.rSelect) ui.rSelect.innerHTML += `<option value="${id}">${b.name} (${bTypeName})</option>`;
         if(b.status !== 'completed' && ui.eSelect) ui.eSelect.innerHTML += `<option value="${id}">${b.name}</option>`;
 
         let batchAlertHtml = '';
+        const hoursToHatcher = (new Date(b.hatcherDate) - now) / 3600000;
+        const hoursToHatch = (new Date(b.hatchDate) - now) / 3600000;
+        const daysToSlaughter = (new Date(b.rearDate) - now) / 86400000;
 
-        if (b.status === 'incubator' || b.status === 'hatcher') {
+        if (b.status === 'incubator') {
             stats.eggs += b.initialEggs;
-            const hoursIn = Math.floor((now - new Date(b.insertDate)) / (1000 * 60 * 60));
-            const daysIn = (hoursIn / 24).toFixed(1);
+            const daysIn = (Math.floor((now - new Date(b.insertDate)) / 3600000) / 24).toFixed(1);
+            let badge = `<span class="badge" style="background:var(--info);">حضانة</span>`, actionBtn = '';
             
-            let badge = '', actionBtn = '';
-            
-            if(b.status === 'incubator') {
-                badge = `<span class="badge" style="background:var(--info);">حضانة</span>`;
-                if(hoursIn >= (std.hatcher * 24)) { 
-                    actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
-                    if(ui.alerts) ui.alerts.innerHTML += `<div style="color:var(--info); font-weight:bold;">⚠️ الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للنقل للمفقس!</div>`; 
-                    batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
-                }
-            } else {
-                badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`;
-                if(hoursIn >= (std.hatch * 24)) { 
-                    actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
-                    if(ui.alerts) ui.alerts.innerHTML += `<div style="color:var(--success); font-weight:bold;">🐣 الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للفقس الآن!</div>`; 
-                    batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px; animation: pulse 2s infinite;">🔔 حان موعد الفقس!</div>`;
-                }
+            if (hoursToHatcher > 0 && hoursToHatcher <= 72) {
+                const daysLeft = Math.ceil(hoursToHatcher / 24);
+                ui.alerts.innerHTML += `<div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--warning); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">⏳ الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> للنزول للمفقس.</div>`;
+            }
+            if(hoursToHatcher <= 0) { 
+                actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
+                ui.alerts.innerHTML += `<div style="color:var(--info); font-weight:bold; margin-bottom: 8px;">⚠️ الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للنقل للمفقس!</div>`; 
+                batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
             }
 
-            if(ui.inc) ui.inc.innerHTML += `
+            ui.inc.innerHTML += `
             <div class="batch-card stage-${b.status}">
                 ${batchAlertHtml}
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -556,38 +501,84 @@ function renderBatches() {
                     </div>
                     ${badge}
                 </div>
-                
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>تاريخ الدخول:</span> <strong>${formatDateTime(b.insertDate)}</strong></div>
                     <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
                 </div>
-
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
                     <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
                     <span>مر ${daysIn} يوم</span>
                 </div>
-
                 <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
                     <div style="display:flex; gap:5px;">
                         <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
                         <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
                         <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
-                        <button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
+                        <button onclick="openEditBatch('${id}')" title="تعديل شامل" style="color: var(--info);">✏️</button>
                         <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
                     </div>
-                    <div style="display:flex; gap:5px;">
-                        ${actionBtn}
-                    </div>
+                    <div style="display:flex; gap:5px;">${actionBtn}</div>
                 </div>
             </div>`;
-        }
-        else if (b.status === 'rearing') {
+        } else if (b.status === 'hatcher') {
+            stats.eggs += b.initialEggs;
+            const daysIn = (Math.floor((now - new Date(b.insertDate)) / 3600000) / 24).toFixed(1);
+            let badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`, actionBtn = '';
+            
+            if (hoursToHatch > 0 && hoursToHatch <= 72) {
+                const daysLeft = Math.ceil(hoursToHatch / 24);
+                ui.alerts.innerHTML += `<div style="background: rgba(14, 165, 233, 0.1); border-right: 4px solid var(--info); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🐣 الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> على الفقس.</div>`;
+            }
+            if(hoursToHatch <= 0) { 
+                actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
+                ui.alerts.innerHTML += `<div style="color:var(--success); font-weight:bold; margin-bottom: 8px;">🐣 الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للفقس الآن!</div>`; 
+                batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px; animation: pulse 2s infinite;">🔔 حان موعد الفقس!</div>`;
+            }
+
+            ui.inc.innerHTML += `
+            <div class="batch-card stage-${b.status}">
+                ${batchAlertHtml}
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:24px;">${bIcon}</span>
+                        <div>
+                            <strong style="font-size:18px; color:var(--text-primary); display:block;">${b.name}</strong>
+                            <span style="font-size:12px; color:var(--text-secondary);">${bTypeName}</span>
+                        </div>
+                    </div>
+                    ${badge}
+                </div>
+                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>تاريخ الدخول:</span> <strong>${formatDateTime(b.insertDate)}</strong></div>
+                    <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
+                    <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
+                    <span>مر ${daysIn} يوم</span>
+                </div>
+                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
+                        <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
+                        <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
+                        <button onclick="openEditBatch('${id}')" title="تعديل شامل" style="color: var(--info);">✏️</button>
+                        <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
+                    </div>
+                    <div style="display:flex; gap:5px;">${actionBtn}</div>
+                </div>
+            </div>`;
+        } else if (b.status === 'rearing') {
             const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive; 
             const age = Math.floor((now - new Date(b.hatchDate)) / 86400000); 
             if(ui.dSelect) ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
-            if(age >= std.slaughter && ui.alerts) ui.alerts.innerHTML += `<div style="color:var(--warning);">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
             
-            if(ui.rear) ui.rear.innerHTML += `<div class="batch-card stage-rearing">
+            if (daysToSlaughter > 0 && daysToSlaughter <= 3) {
+                 ui.alerts.innerHTML += `<div style="background: rgba(239, 68, 68, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🔪 الدفعة <b>${b.name}</b> متبقي لها <b>${Math.ceil(daysToSlaughter)} أيام</b> للذبح.</div>`;
+            } else if (daysToSlaughter <= 0) {
+                 ui.alerts.innerHTML += `<div style="color:var(--warning); font-weight:bold; margin-bottom:8px;">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
+            }
+            
+            ui.rear.innerHTML += `<div class="batch-card stage-rearing">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
                 <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span>
@@ -599,7 +590,7 @@ function renderBatches() {
             </div>
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
                 <div style="display:flex; gap:8px;">
-                    <button onclick="renameBatch('${id}')" title="تعديل الاسم" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
+                    <button onclick="openEditBatch('${id}')" title="تعديل الاسم والتواريخ" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
                     <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color: #ef4444; font-size:18px;">🗑️</button>
                 </div>
                 <div style="display:flex; gap:8px;">
@@ -613,23 +604,18 @@ function renderBatches() {
             </div></div>`;
         }
         else if (b.status === 'slaughter') { 
-            if(ui.slaugh) ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
+            ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
                 <span class="badge" style="background:var(--danger);">قيد الذبح</span>
             </div>
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
                 <div style="display:flex; gap:5px;">
-                    <button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
                     <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')">
-                        <i class="fas fa-undo"></i> تراجع ↩️
-                    </button>
-                    <button class="btn btn-success" style="margin:0; padding:6px 12px; font-size:13px;" onclick="promptClassify('${id}')">
-                        تصنيف ❄️
-                    </button>
+                    <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع</button>
+                    <button class="btn btn-success" style="margin:0; padding:6px 12px; font-size:13px;" onclick="promptClassify('${id}')">تصنيف للترحيل ❄️</button>
                 </div>
             </div></div>`; 
         }
@@ -637,69 +623,77 @@ function renderBatches() {
     
     if(ui.alerts && ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ لا يوجد تنبيهات أو نواقص حالياً.</div>';
     
-    const dashEggsEl = document.getElementById('dashEggs');
-    if(dashEggsEl) dashEggsEl.innerText = stats.eggs; 
-    
-    const dashChicksEl = document.getElementById('dashChicks');
-    if(dashChicksEl) dashChicksEl.innerText = stats.chicks;
+    if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
+    if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
-if (!document.getElementById('dynamicStyles')) {
-    const style = document.createElement('style');
-    style.id = 'dynamicStyles';
-    style.innerHTML = `@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }`;
-    document.head.appendChild(style);
-}
-
-// ================= رندر الفريزر الجديد (ديناميكي بالكامل) =================
+// ================= 9. رندر الفريزر الديناميكي =================
 onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
-    const config = snapshot.exists() ? snapshot.val() : {};
-    
-    // هنسحب كمان الأرصدة عشان نحطها جنب الأسماء
+    dynamicFreezerConfig = snapshot.exists() ? snapshot.val() : {};
+    const saleSelect = document.getElementById('sGrade');
+    if(saleSelect) {
+        saleSelect.innerHTML = '<option value="">-- اختر الصنف --</option>';
+        Object.keys(dynamicFreezerConfig).forEach(id => {
+            saleSelect.innerHTML += `<option value="${id}">${dynamicFreezerConfig[id].name}</option>`;
+        });
+    }
+
     get(ref(db, "inventory/freezerStock")).then(stockSnap => {
         const stock = stockSnap.exists() ? stockSnap.val() : {};
         const grid = document.getElementById('freezerGrid');
         const dashTotal = document.getElementById('dashFreezer');
-        
         if(!grid) return;
-        
-        grid.innerHTML = '';
-        let totalCount = 0;
-        
-        Object.keys(config).forEach(id => {
-            const item = config[id];
-            const qty = stock[id] || 0;
-            totalCount += qty; // بنحسب الإجمالي عشان الداشبورد
-            
+        grid.innerHTML = ''; let totalCount = 0;
+        Object.keys(dynamicFreezerConfig).forEach(id => {
+            const item = dynamicFreezerConfig[id]; const qty = stock[id] || 0; totalCount += qty;
             grid.innerHTML += `
-                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
-                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border);">
-                    <h4 style="margin:0;">${item.name}</h4>
-                    <div style="font-size:22px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
-                    <div style="font-size:12px; color:var(--text-secondary);">السعر: ${item.price} ج.م</div>
-                </div>
-            `;
+                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" style="cursor:pointer; text-align:center; padding:15px; margin:0;">
+                    <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
+                    <div style="font-size:28px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
+                    <div style="font-size:12px; color:var(--success); font-weight:bold;">${item.price} ج.م</div>
+                </div>`;
         });
-        
-        // تحديث إجمالي الفريزر في الداشبورد
         if(dashTotal) dashTotal.innerText = totalCount;
     });
 });
 
+window.addNewCategory = async () => {
+    const name = document.getElementById('newCatName').value;
+    const price = parseFloat(document.getElementById('newCatPrice').value);
+    if(!name || !price) return showToast("أكمل البيانات", true);
+    const id = name.replace(/\s+/g, '_').toLowerCase(); 
+    await set(ref(db, `inventory/freezerConfig/${id}`), { name, price });
+    await set(ref(db, `inventory/freezerStock/${id}`), 0);
+    closeModal('modalAddCategory'); showToast("تم إضافة الصنف الجديد");
+};
+
+window.editFreezerItem = (id, currentStock, currentPrice, name) => {
+    const newQty = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
+    const newPrice = prompt(`تعديل سعر صنف (${name}):`, currentPrice);
+    if(newQty !== null && newPrice !== null) {
+        update(ref(db, `inventory/freezerStock`), { [id]: parseInt(newQty) });
+        update(ref(db, `inventory/freezerConfig/${id}`), { price: parseFloat(newPrice) });
+        showToast("تم التحديث بنجاح");
+    }
+};
 
 onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
+    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; 
+    const logsEl = document.getElementById('freezerLogs');
+    if(!logsEl) return;
+    let html = ''; const now = new Date();
     Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
         const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
-        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new">جديد</span>' : (daysOld > 30 ? '<span class="freezer-tag-old">قديم</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`);
-        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${gradeNames[k]}: ${log.items[k]}`).join(' | ');
-        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong>${ageTag}</div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
+        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${log.items[k]}`).join(' | ');
+        html += `<div style="background:var(--bg-main); padding:12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--info);">
+            <div style="display:flex; justify-content:space-between;"><strong>${log.batchName}</strong><span style="font-size:11px;">منذ ${daysOld} يوم</span></div>
+            <div style="color:var(--text-secondary); font-size:12px; margin:5px 0;">تاريخ: ${log.dateAdded}</div>
+            <div style="font-weight:bold; color:var(--primary); font-size:13px;">${itemsStr}</div></div>`;
     });
-    
-    const freezerLogsEl = document.getElementById('freezerLogs');
-    if(freezerLogsEl) freezerLogsEl.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
+    logsEl.innerHTML = html || '<div style="text-align:center;">لا توجد سجلات</div>';
 });
 
+// ================= 10. رندر الماليات والتقارير =================
 onValue(ref(db, "ledger"), (snapshot) => {
     allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
     Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
@@ -717,26 +711,22 @@ onValue(ref(db, "ledger"), (snapshot) => {
     if(document.getElementById('dashSales')) document.getElementById('dashSales').innerText = tIn;
     if(document.getElementById('ledgerList')) document.getElementById('ledgerList').innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
     
-    const reportSelect = document.getElementById('reportBatchSelect');
-    if(reportSelect && reportSelect.value) window.generateBatchReport(); 
+    if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
     updateCashDisplay();
 });
 
 window.generateBatchReport = () => {
-    const idEl = document.getElementById('reportBatchSelect');
+    const id = document.getElementById('reportBatchSelect')?.value;
     const container = document.getElementById('batchReportContainer');
-    if(!container) return;
-    
-    const id = idEl ? idEl.value : null;
-    if(!id) { container.style.display = 'none'; return; }
+    if(!id || !container) { if(container) container.style.display = 'none'; return; }
     
     const b = allBatches[id]; let batchCost = 0; 
     Object.values(allTransactions).forEach(t => { if(t.batchId === id && (t.type === 'out' || t.type === 'batch_cost')) batchCost += t.amount; });
-    const hatched = b.hatchedChicks || 0; const dead = b.totalDead || 0;
+    const dead = b.totalDead || 0;
     
     if(b.status === 'completed' && b.classifyData) {
         const yieldTotal = b.slaughterYield || 0; let potentialRevenue = 0; let outputHtml = '';
-        Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (globalSettings[g]||0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${gradeNames[g]}: ${b.classifyData[g]}</span>`; } });
+        Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (dynamicFreezerConfig[g]?.price || 0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${dynamicFreezerConfig[g]?.name || g}: ${b.classifyData[g]}</span>`; } });
         
         const costPerPair = yieldTotal > 0 ? ((batchCost / yieldTotal) * 2).toFixed(2) : 0; const netProfit = potentialRevenue - batchCost;
         const totalFeedKg = b.totalFeed || 0; const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / yieldTotal).toFixed(0) : 0; let fcrStatus = '';
@@ -745,55 +735,44 @@ window.generateBatchReport = () => {
         let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
 
         container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);"><div style="text-align:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;"><h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3></div><div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
-    } else { container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل وتُذبح بعد لإصدار بيان ختامي دقيق.</div>`; }
+    } else { container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل للبيان الختامي.</div>`; }
     container.style.display = 'block';
 };
 
-// ================= المساعد الذكي للتربية (دليل العامل) =================
+// ================= 11. دليل العامل والمهام الذكية =================
 function getQuailDailyNeeds(age, aliveCount, system) {
     let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
-    
     if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
     else if (age <= 7) { temp = 35; feedPerBird = 6; meds = "أملاح معدنية وأحماض أمينية"; }
-    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو ماء شرب)"; }
+    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو شرب)"; }
     else if (age <= 14) { temp = 31; feedPerBird = 11; if(age >= 13) meds = "جرعة وقاية: كوكسيديا وكلوستريديا"; }
     else if (age <= 21) { temp = 28; feedPerBird = 15; meds = "فيتامينات (هـ سيلينيوم) لرفع المناعة"; }
     else if (age <= 28) { temp = 25; feedPerBird = 20; meds = "ماء نقي"; }
-    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (يمنع إعطاء أدوية لفترة السحب)"; }
-    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - الدفعة جاهزة للذبح"; }
+    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (فترة سحب الدواء)"; }
+    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - جاهزة للذبح"; }
 
     let totalFeedKg = (feedPerBird * aliveCount) / 1000;
     let totalWaterLiters = (totalFeedKg * 2.2); 
     let spaceRequired = system === 'battery' ? (aliveCount / 120) : (aliveCount / 60);
 
-    return { 
-        temp: temp, 
-        feed: totalFeedKg.toFixed(2), 
-        water: totalWaterLiters.toFixed(1), 
-        space: spaceRequired.toFixed(1), 
-        meds: meds 
-    };
+    return { temp, feed: totalFeedKg.toFixed(2), water: totalWaterLiters.toFixed(1), space: spaceRequired.toFixed(1), meds };
 }
 
 window.openDailyGuide = (id) => {
     const b = allBatches[id];
     if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
 
-    const now = new Date();
-    const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
+    const age = Math.floor((new Date() - new Date(b.hatchDate)) / 86400000) || 1; 
     const alive = b.hatchedChicks - (b.totalDead || 0);
     const system = b.rearingSystem || 'floor';
-    const systemName = system === 'floor' ? 'أرضي (نشارة)' : 'بطاريات (أقفاص)';
-
     const needs = getQuailDailyNeeds(age, alive, system);
 
-    const content = `
+    document.getElementById('dailyGuideContent').innerHTML = `
         <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
             <div style="text-align:center; margin-bottom:15px;">
                 <span style="font-size:14px; color:var(--text-secondary);">دفعة: <strong>${b.name}</strong></span><br>
                 <span style="font-size:18px; color:var(--primary); font-weight:800;">عمر: ${age} يوم</span>
             </div>
-            
             <div class="grid-2" style="gap:10px;">
                 <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
                     <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة المطلوبة</div>
@@ -804,108 +783,54 @@ window.openDailyGuide = (id) => {
                     <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.water} لتر</div>
                 </div>
             </div>
-
             <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--warning);">
-                <div style="font-size:12px; color:var(--text-secondary);">🌾 كمية العلف لليوم بالكامل (${alive} طائر)</div>
+                <div style="font-size:12px; color:var(--text-secondary);">🌾 العلف لليوم بالكامل (${alive} طائر)</div>
                 <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
             </div>
-
             <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
                 <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات أو الإضافات بالماء اليوم</div>
                 <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
             </div>
-
             <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
                 <div style="font-size:12px; color:var(--text-secondary);">📏 المساحة ونوع التربية</div>
                 <div style="font-size:14px; font-weight:bold; color:var(--text-primary);">
-                    نظام: ${systemName} <br>
-                    مساحة العنبر المطلوبة: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
+                    نظام: ${system === 'floor' ? 'أرضي' : 'بطاريات'} <br>
+                    مساحة العنبر: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
                 </div>
             </div>
-        </div>
-    `;
-
-    const guideContentEl = document.getElementById('dailyGuideContent');
-    if(guideContentEl) guideContentEl.innerHTML = content;
+        </div>`;
     openModal('modalDailyGuide');
 };
-// ================= نظام الإنتاجية والبحث السريع (Command Palette) =================
 
+// ================= 12. نظام البحث والإنتاجية (Ctrl+K) =================
 const systemCommands = [
-    { id: 'nav_dash', title: 'الانتقال إلى: لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
-    { id: 'nav_inc', title: 'الانتقال إلى: المفرخ (Incubator)', icon: 'fas fa-egg', action: () => switchPage('incubator') },
-    { id: 'nav_rear', title: 'الانتقال إلى: عنابر التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
-    { id: 'nav_slaugh', title: 'الانتقال إلى: الذبح والتصنيف', icon: 'fas fa-knife', action: () => switchPage('slaughter') },
-    { id: 'nav_freezer', title: 'الانتقال إلى: الفريزر والمخزون', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
-    { id: 'nav_finance', title: 'الانتقال إلى: الحسابات والماليات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
-    { id: 'nav_settings', title: 'الانتقال إلى: مركز الإعدادات', icon: 'fas fa-sliders-h', action: () => switchPage('settingsPage') },
-    { id: 'act_batch', title: 'إجراء: إضافة دفعة جديدة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
-    { id: 'act_feed', title: 'إجراء: شراء علف للمخزن 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
-    { id: 'act_sale', title: 'إجراء: تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') },
-    { id: 'act_exp', title: 'إجراء: تسجيل مصروفات 💸', icon: 'fas fa-receipt', action: () => openModal('modalExpense') },
+    { id: 'nav_dash', title: 'لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
+    { id: 'nav_inc', title: 'المفرخ', icon: 'fas fa-egg', action: () => switchPage('incubator') },
+    { id: 'nav_rear', title: 'التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
+    { id: 'nav_freezer', title: 'الفريزر', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
+    { id: 'nav_finance', title: 'الحسابات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
+    { id: 'act_batch', title: 'إضافة دفعة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
+    { id: 'act_feed', title: 'شراء علف 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
+    { id: 'act_sale', title: 'تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') }
 ];
 
-window.openCommandPalette = () => {
-    const cp = document.getElementById('commandPalette');
-    if(!cp) return;
-    cp.classList.add('active');
-    setTimeout(() => document.getElementById('cmdInput').focus(), 100); 
-    renderCmdResults('');
-};
-
-window.closeCommandPalette = () => {
-    const cp = document.getElementById('commandPalette');
-    if(cp) cp.classList.remove('active');
-    const input = document.getElementById('cmdInput');
-    if(input) input.value = '';
-};
+window.openCommandPalette = () => { document.getElementById('commandPalette')?.classList.add('active'); setTimeout(() => document.getElementById('cmdInput')?.focus(), 100); renderCmdResults(''); };
+window.closeCommandPalette = () => { document.getElementById('commandPalette')?.classList.remove('active'); const inp = document.getElementById('cmdInput'); if(inp) inp.value = ''; };
 
 const renderCmdResults = (query) => {
-    const container = document.getElementById('cmdResults');
-    if(!container) return;
-    container.innerHTML = '';
-    
+    const container = document.getElementById('cmdResults'); if(!container) return; container.innerHTML = '';
     const filtered = systemCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()));
-    
-    if(filtered.length === 0) {
-        container.innerHTML = `<div style="padding: 15px; text-align: center; color: var(--text-secondary);">لا توجد أوامر مطابقة لـ "${query}"</div>`;
-        return;
-    }
-
-    filtered.forEach((cmd) => {
+    if(filtered.length === 0) return container.innerHTML = `<div style="padding:15px; text-align:center;">لا توجد أوامر</div>`;
+    filtered.forEach(cmd => {
         const el = document.createElement('div');
-        el.innerHTML = `<div style="display:flex; align-items:center; gap:12px;"><i class="${cmd.icon}" style="color: var(--primary); font-size: 16px; width: 20px; text-align: center;"></i> <span style="font-size: 15px; font-weight: bold;">${cmd.title}</span></div><span style="font-size: 11px; color: var(--text-secondary);">Click</span>`;
-        el.style.cssText = `padding: 12px 16px; cursor: pointer; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; color: var(--text-primary); transition: all 0.2s; margin-bottom: 4px;`;
-        
-        el.onmouseover = () => { el.style.background = 'var(--primary)'; el.style.color = '#fff'; el.querySelector('i').style.color = '#fff'; el.querySelector('span:last-child').style.color = 'rgba(255,255,255,0.7)'; };
-        el.onmouseout = () => { el.style.background = 'transparent'; el.style.color = 'var(--text-primary)'; el.querySelector('i').style.color = 'var(--primary)'; el.querySelector('span:last-child').style.color = 'var(--text-secondary)'; };
-        
-        el.onclick = () => {
-            closeCommandPalette();
-            cmd.action();
-        };
+        el.innerHTML = `<i class="${cmd.icon}" style="color:var(--primary); width:20px;"></i> <b>${cmd.title}</b>`;
+        el.style.cssText = `padding:12px; cursor:pointer; border-radius:8px; display:flex; align-items:center; gap:10px; transition:0.2s;`;
+        el.onmouseover = () => el.style.background = 'rgba(37,99,235,0.1)'; el.onmouseout = () => el.style.background = 'transparent';
+        el.onclick = () => { closeCommandPalette(); cmd.action(); };
         container.appendChild(el);
     });
 };
 
-document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault(); 
-        openCommandPalette();
-    }
-    if (e.key === 'Escape') {
-        closeCommandPalette();
-    }
-});
-
-document.addEventListener('click', (e) => {
-    const cp = document.getElementById('commandPalette');
-    if (cp && e.target === cp) {
-        closeCommandPalette();
-    }
-});
-
-const cmdInput = document.getElementById('cmdInput');
-if(cmdInput) {
-    cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
-}
+document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCommandPalette(); } if (e.key === 'Escape') closeCommandPalette(); });
+document.addEventListener('click', (e) => { if (e.target === document.getElementById('commandPalette')) closeCommandPalette(); });
+document.getElementById('cmdInput')?.addEventListener('input', (e) => renderCmdResults(e.target.value));
