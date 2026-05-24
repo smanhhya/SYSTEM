@@ -64,6 +64,17 @@ window.autoCalcDates = () => {
 };
 
 window.openModal = (id) => {
+    // تصفير الحقول لمنع إدخال بيانات مزدوجة
+    const modalEl = document.getElementById(id);
+    if(modalEl) {
+        modalEl.querySelectorAll('input[type="number"], input[type="text"]').forEach(input => {
+            // لا تصفر الحقول التي تحتوي على تواريخ أو أوقات لمنع مسح الحسابات التلقائية
+            if(input.id !== 'bHatcherDate' && input.id !== 'bHatchDate' && input.id !== 'bSlaughterDate') {
+                input.value = '';
+            }
+        });
+    }
+
     if(id === 'modalBatch') {
         const typeEl = document.getElementById('bBirdType');
         if(typeEl) typeEl.value = globalSettings.birdType || 'quail';
@@ -75,7 +86,7 @@ window.openModal = (id) => {
         }
         setTimeout(window.autoCalcDates, 50); 
     } 
-    openModal(id);
+    openModal(id); // استدعاء دالة openModal الأساسية من ملف ui.js
 };
 
 window.closeModal = closeModal;
@@ -467,8 +478,21 @@ window.saveTransaction = async (type, amountOverride = null, descOverride = null
 window.deleteTransaction = async (id) => {
     if(confirm("حذف هذه المعاملة؟")) {
         const t = allTransactions[id];
-        await set(ref(db, "cashBox"), manualCash + (t.type === 'in' ? -t.amount : t.amount));
-        await remove(ref(db, `ledger/${id}`)); showToast("تم الحذف وتعديل الخزنة");
+        
+        // تعديل الكاش فقط للعمليات النقدية (in / out)
+        if (t.type === 'in') {
+            await set(ref(db, "cashBox"), manualCash - t.amount);
+        } else if (t.type === 'out') {
+            await set(ref(db, "cashBox"), manualCash + t.amount);
+        } 
+        // إذا كان السحب عيني (علف)، نعيد كمية العلف للمخزن ولا نلمس الخزنة النقدية
+        else if (t.type === 'batch_cost') {
+            const feedQty = t.amount / (globalSettings.feedPrice || 30);
+            await set(ref(db, "inventory/feedStock"), currentFeedStock + feedQty);
+        }
+
+        await remove(ref(db, `ledger/${id}`)); 
+        showToast("تم الحذف وتحديث الأرصدة بنجاح");
     }
 };
 
