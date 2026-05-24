@@ -829,3 +829,84 @@ window.openDailyGuide = (id) => {
     if(guideContentEl) guideContentEl.innerHTML = content;
     openModal('modalDailyGuide');
 };
+// ================= نظام الإنتاجية والبحث السريع (Command Palette) =================
+
+// قائمة الأوامر السريعة المتاحة
+const systemCommands = [
+    { id: 'nav_dash', title: 'الانتقال إلى: لوحة القيادة (Dashboard)', icon: 'fas fa-home', action: () => switchPage('dashboard') },
+    { id: 'nav_inc', title: 'الانتقال إلى: المفرخ وإدارة البيض', icon: 'fas fa-egg', action: () => switchPage('incubator') },
+    { id: 'nav_rear', title: 'الانتقال إلى: عنابر التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
+    { id: 'nav_slaugh', title: 'الانتقال إلى: قسم الذبح والتصنيف', icon: 'fas fa-knife', action: () => switchPage('slaughter') },
+    { id: 'nav_freezer', title: 'الانتقال إلى: الفريزر والمخزون', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
+    { id: 'nav_finance', title: 'الانتقال إلى: الحسابات والماليات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
+    { id: 'nav_settings', title: 'الانتقال إلى: مركز الإعدادات', icon: 'fas fa-cog', action: () => switchPage('settingsPage') },
+    { id: 'act_batch', title: 'أمر سريع: إضافة دفعة جديدة 🐣', icon: 'fas fa-plus-circle', action: () => openModal('modalBatch') },
+    { id: 'act_feed', title: 'أمر سريع: شراء وتوريد علف 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
+    { id: 'act_sale', title: 'أمر سريع: تسجيل مبيعات مباشرة 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') },
+    { id: 'act_exp', title: 'أمر سريع: تسجيل مصروف عام 💸', icon: 'fas fa-receipt', action: () => openModal('modalExpense') },
+    { id: 'theme_dark', title: 'تخصيص: تفعيل الوضع الليلي 🌙', icon: 'fas fa-moon', action: () => { window.setThemeMode('dark'); switchPage('settingsPage'); } },
+    { id: 'theme_light', title: 'تخصيص: تفعيل الوضع الفاتح ☀️', icon: 'fas fa-sun', action: () => { window.setThemeMode('light'); switchPage('settingsPage'); } }
+];
+
+window.openCommandPalette = () => {
+    document.getElementById('commandPalette').classList.add('active');
+    setTimeout(() => document.getElementById('cmdInput').focus(), 100);
+    renderCmdResults('');
+};
+
+window.closeCommandPalette = () => {
+    document.getElementById('commandPalette').classList.remove('active');
+    const input = document.getElementById('cmdInput');
+    if(input) input.value = '';
+};
+
+// إغلاق النافذة لو ضغطت بالماوس براها
+document.getElementById('commandPalette').addEventListener('click', (e) => {
+    if(e.target.id === 'commandPalette') closeCommandPalette();
+});
+
+const renderCmdResults = (query) => {
+    const container = document.getElementById('cmdResults');
+    if(!container) return;
+    container.innerHTML = '';
+    
+    // فلترة الأوامر بناءً على اللي بتكتبه
+    const filtered = systemCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()));
+    
+    if(filtered.length === 0) {
+        container.innerHTML = `<div style="padding: 15px; text-align: center; color: var(--text-secondary);">لا توجد نتائج لـ "${query}"</div>`;
+        return;
+    }
+
+    filtered.forEach(cmd => {
+        const el = document.createElement('div');
+        el.innerHTML = `<i class="${cmd.icon}" style="width: 25px; color: var(--primary);"></i> <span>${cmd.title}</span>`;
+        el.style.cssText = `padding: 12px 15px; cursor: pointer; border-radius: 8px; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; color: var(--text-primary); transition: background 0.2s;`;
+        
+        el.onmouseover = () => el.style.background = 'rgba(37, 99, 235, 0.1)';
+        el.onmouseout = () => el.style.background = 'transparent';
+        
+        el.onclick = () => {
+            closeCommandPalette();
+            cmd.action();
+        };
+        container.appendChild(el);
+    });
+};
+
+// الاستماع لزراير الكيبورد (Ctrl + K) أو (Esc)
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+    }
+    if (e.key === 'Escape') {
+        closeCommandPalette();
+    }
+});
+
+// فلترة حية وأنت بتكتب
+const cmdInput = document.getElementById('cmdInput');
+if(cmdInput) {
+    cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
+}
