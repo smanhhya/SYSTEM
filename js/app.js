@@ -321,10 +321,17 @@ window.renderFreezerLogs = () => {
     let html = ''; const now = new Date();
     
     Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
-        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
+        const log = allFreezerLogs[key]; 
+        const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
         let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:10px;">جديد</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`;
-        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${log.items[k]}`).join(' | ');
         
+        // 🛡️ التعديل هنا: حارس برمجي لحماية السجل في حالة عدم وجود أصناف بسبب خطأ قديم
+        const safeItems = log.items || {};
+        let itemsStr = Object.keys(safeItems).filter(k => safeItems[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${safeItems[k]}`).join(' | ');
+        
+        // لو السجل كان فاضي يكتب رسالة بدل ما النظام يعطل
+        if(!itemsStr) itemsStr = 'لم يتم تحديد أصناف وقت الذبح';
+
         let delBtn = isDeleteLogMode ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 10px; width:auto; margin:0;" onclick="deleteFreezerLog('${key}')">حذف</button>` : '';
 
         html += `<div class="freezer-log" style="background:var(--bg-main); padding:12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--info);">
@@ -339,6 +346,7 @@ window.renderFreezerLogs = () => {
     
     el.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
 };
+
 
 
 // ================= 5. الدفعات والذبح الديناميكي =================
