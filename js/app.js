@@ -1,13 +1,12 @@
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
 
-// ================= 1. المتغيرات العامة =================
 let allBatches = {};
 let allTransactions = {};
 let allFreezerLogs = {};
 let manualCash = 0; 
 let currentFeedStock = 0; 
-let dynamicFreezerConfig = {};
+let dynamicFreezerConfig = {}; // العقل المدبر الجديد للفريزر
 
 const birdStandards = {
     quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 35 },
@@ -19,21 +18,18 @@ let globalSettings = {
     birdType: 'quail', feedPrice: 30, quailChick: 3.5, chickenChick: 25, turkeyChick: 60, turkeyEgg: 10 
 };
 
-// ================= حل نهائي للتنقل بين الصفحات (موبايل + لاب توب) =================
+// ================= 1. التبديل والواجهة =================
 window.switchPage = (pageId) => {
-    // إخفاء كل الصفحات
+    // إخفاء الكل وإظهار الصفحة المطلوبة (طريقة قوية تدعم الموبايل واللاب توب)
     document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
-    // إظهار الصفحة المطلوبة
     const targetPage = document.getElementById(pageId);
     if(targetPage) targetPage.classList.add('active');
     
-    // تظبيط لون الزرار النشط في القائمة الجانبية والسفلية
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     if (window.event && window.event.currentTarget) {
         window.event.currentTarget.classList.add('active');
     }
 };
-
 
 window.switchSettingsTab = (tabId, element) => {
     document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
@@ -42,11 +38,7 @@ window.switchSettingsTab = (tabId, element) => {
     document.getElementById(`tab-${tabId}`).classList.add('active');
 };
 
-window.closeModal = closeModal;
-window.toggleFab = toggleFab;
-window.showToast = showToast;
-
-// دالة حساب التواريخ أوتوماتيكياً في المفرخ
+// حساب التواريخ التلقائي عند فتح إضافة دفعة
 window.autoCalcDates = () => {
     const type = document.getElementById('bBirdType').value;
     const dateStr = document.getElementById('bDate').value;
@@ -58,9 +50,7 @@ window.autoCalcDates = () => {
     const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
     const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
     
-    let slDays = parseInt(document.getElementById('bSlaughterDays')?.value);
-    if(!slDays || slDays < 1) slDays = std.slaughter;
-    
+    let slDays = parseInt(document.getElementById('bSlaughterDays')?.value) || std.slaughter;
     const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (slDays * 24));
     
     const formatForInput = (d) => {
@@ -68,16 +58,11 @@ window.autoCalcDates = () => {
         return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
     
-    const elHatcher = document.getElementById('bHatcherDate');
-    const elHatch = document.getElementById('bHatchDate');
-    const elSlaughter = document.getElementById('bSlaughterDate');
-    
-    if(elHatcher) elHatcher.value = formatForInput(hatcherD);
-    if(elHatch) elHatch.value = formatForInput(hatchD);
-    if(elSlaughter) elSlaughter.value = formatForInput(rearD);
+    if(document.getElementById('bHatcherDate')) document.getElementById('bHatcherDate').value = formatForInput(hatcherD);
+    if(document.getElementById('bHatchDate')) document.getElementById('bHatchDate').value = formatForInput(hatchD);
+    if(document.getElementById('bSlaughterDate')) document.getElementById('bSlaughterDate').value = formatForInput(rearD);
 };
 
-// تعديل فتح النوافذ لدعم الحساب التلقائي
 window.openModal = (id) => {
     if(id === 'modalBatch') {
         const typeEl = document.getElementById('bBirdType');
@@ -93,7 +78,11 @@ window.openModal = (id) => {
     openModal(id);
 };
 
-// ================= 3. المظهر والألوان =================
+window.closeModal = closeModal;
+window.toggleFab = toggleFab;
+window.showToast = showToast;
+
+// ================= 2. المظهر =================
 const savedTheme = localStorage.getItem('erp_theme') || 'light';
 const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
 document.documentElement.setAttribute('data-theme', savedTheme);
@@ -106,7 +95,6 @@ window.setThemeMode = (mode, el) => {
         el.parentElement.querySelectorAll('.theme-option').forEach(s => s.classList.remove('active'));
         el.classList.add('active');
     }
-    if(window.renderDashboardChart) window.renderDashboardChart(); 
     showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
 };
 
@@ -117,35 +105,25 @@ window.setPrimaryColor = (color, el) => {
         el.parentElement.querySelectorAll('.color-circle').forEach(s => s.classList.remove('active'));
         el.classList.add('active');
     }
-    showToast("تم تغيير لون النظام بنجاح 🎨");
+    showToast("تم تغيير اللون بنجاح 🎨");
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    if(savedTheme === 'dark') {
-        const darkBtn = document.querySelectorAll('.theme-option')[1];
-        if(darkBtn) darkBtn.classList.add('active');
-    } else {
-        const lightBtn = document.querySelectorAll('.theme-option')[0];
-        if(lightBtn) lightBtn.classList.add('active');
-    }
-});
-
-// ================= 4. إدارة الخزنة والمخازن =================
+// ================= 3. إعدادات الخزنة والمخزن =================
 onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
     const feedEl = document.getElementById('feedStockDisplay');
     if(feedEl) feedEl.innerText = currentFeedStock + " كجم";
-    if(Object.keys(allBatches).length > 0) renderBatches();
 });
 
 window.buyFeed = async () => {
     const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
     const cost = parseFloat(document.getElementById('bfTotalCost')?.value) || 0;
-    if(!qty || !cost) return showToast("برجاء إدخال الكمية والتكلفة", true);
+    if(!qty || !cost) return showToast("برجاء إدخال البيانات", true);
+
     await set(ref(db, "inventory/feedStock"), currentFeedStock + qty);
-    await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `شراء وتوريد علف للمخزن (${qty} كجم)`, batchId: 'general', date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+    await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `شراء علف (${qty} كجم)`, batchId: 'general', date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
     await set(ref(db, "cashBox"), manualCash - cost);
-    closeModal('modalBuyFeed'); showToast(`تم إضافة ${qty} كجم للمخزن وخصم ${cost} ج.م`);
+    closeModal('modalBuyFeed'); showToast(`تم إضافة ${qty} كجم`);
 };
 
 onValue(ref(db, "cashBox"), (snapshot) => {
@@ -158,21 +136,18 @@ function updateCashDisplay() {
     if (!netProfitEl) return;
     let cashBoxEl = document.getElementById('customCashBoxDisplay');
     if (!cashBoxEl) {
-        const parent = netProfitEl.parentElement;
         const container = document.createElement('div');
-        container.id = 'customCashBox';
-        container.style.marginTop = '15px'; container.style.paddingTop = '12px'; container.style.borderTop = '1px dashed var(--border)'; container.style.textAlign = 'center';
-        container.innerHTML = `<span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span><div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div><button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold;"><i class="fas fa-edit"></i> تعديل الكاش اليدوي ✏️</button>`;
-        parent.appendChild(container);
+        container.innerHTML = `<span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span><div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div><button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold;"><i class="fas fa-edit"></i> تعديل الكاش</button>`;
+        netProfitEl.parentElement.appendChild(container);
         cashBoxEl = document.getElementById('customCashBoxDisplay');
     }
     if (cashBoxEl) cashBoxEl.innerText = manualCash + " ج.م";
 }
 
 window.editCashBox = async () => {
-    const newCash = prompt("اكتب المبلغ الفعلي المتواجد في جيبك أو خزنتك الآن لتحديث الرصيد:", manualCash);
+    const newCash = prompt("المبلغ الفعلي بالخزنة الآن:", manualCash);
     if (newCash !== null && !isNaN(newCash) && newCash.trim() !== "") {
-        await set(ref(db, "cashBox"), parseFloat(newCash)); showToast("تم تحديث رصيد الكاش بنجاح");
+        await set(ref(db, "cashBox"), parseFloat(newCash)); showToast("تم التحديث");
     }
 };
 
@@ -195,12 +170,101 @@ window.saveSettings = async () => {
         quailChick: parseFloat(document.getElementById('setQuailChick')?.value) || 3.5,
         chickenChick: parseFloat(document.getElementById('setChickenChick')?.value) || 25,
         turkeyChick: parseFloat(document.getElementById('setTurkeyChick')?.value) || 60,
-        turkeyEgg: parseFloat(document.getElementById('setTurkeyEgg')?.value) || 10,
+        turkeyEgg: parseFloat(document.getElementById('setTurkeyEgg')?.value) || 10
     };
-    await set(ref(db, 'settings'), newSet); showToast("تم حفظ الإعدادات بنجاح");
+    await set(ref(db, 'settings'), newSet); showToast("تم حفظ إعدادات التشغيل");
 };
 
-// ================= 5. إدارة الدفعات والتواريخ =================
+// ================= 4. الفريزر الديناميكي وحل مشكلة الاختفاء =================
+onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
+    // السحر هنا: لو الفريزر فاضي ومفيش أصناف، السيستم هيزرع الأصناف الافتراضية أوتوماتيك!
+    if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
+        const defaultCats = {
+            'royal': { name: 'رويال', price: 120 },
+            'super_special': { name: 'سوبر سبشيال', price: 110 },
+            'special': { name: 'سبشيال', price: 100 },
+            'jumbo': { name: 'جامبو', price: 90 },
+            'super': { name: 'سوبر', price: 80 },
+            'bad': { name: 'كسر / فرز', price: 0 }
+        };
+        await set(ref(db, "inventory/freezerConfig"), defaultCats);
+        await set(ref(db, "inventory/freezerStock"), { 'royal':0, 'super_special':0, 'special':0, 'jumbo':0, 'super':0, 'bad':0 });
+        return; // هيرجع يقرا من تاني لوحده بعد الزراعة
+    }
+
+    dynamicFreezerConfig = snapshot.val();
+    
+    // تحديث قايمة المبيعات عشان تظهر فيها الأصناف
+    const saleSelect = document.getElementById('sGrade');
+    if(saleSelect) {
+        saleSelect.innerHTML = '<option value="">-- اختر الصنف للبيع --</option>';
+        Object.keys(dynamicFreezerConfig).forEach(id => {
+            saleSelect.innerHTML += `<option value="${id}">${dynamicFreezerConfig[id].name}</option>`;
+        });
+    }
+
+    // رندر كروت الفريزر
+    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
+        const stock = stockSnap.exists() ? stockSnap.val() : {};
+        const grid = document.getElementById('freezerGrid');
+        const dashTotal = document.getElementById('dashFreezer');
+        if(!grid) return;
+        
+        grid.innerHTML = ''; let totalCount = 0;
+        
+        Object.keys(dynamicFreezerConfig).forEach(id => {
+            const item = dynamicFreezerConfig[id];
+            const qty = stock[id] || 0;
+            totalCount += qty;
+            
+            grid.innerHTML += `
+                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
+                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0;">
+                    <h4 style="margin:0; color:var(--text-secondary);">${item.name}</h4>
+                    <div style="font-size:28px; font-weight:800; color:var(--primary); margin:10px 0;">${qty}</div>
+                    <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px; border-radius: 6px;">السعر: ${item.price} ج.م <i class="fas fa-edit"></i></div>
+                </div>
+            `;
+        });
+        if(dashTotal) dashTotal.innerText = totalCount;
+    });
+});
+
+window.addNewCategory = async () => {
+    const name = document.getElementById('newCatName').value;
+    const price = parseFloat(document.getElementById('newCatPrice').value);
+    if(!name || !price) return showToast("أكمل البيانات", true);
+    const id = name.replace(/\s+/g, '_').toLowerCase(); 
+    await set(ref(db, `inventory/freezerConfig/${id}`), { name, price });
+    await set(ref(db, `inventory/freezerStock/${id}`), 0);
+    closeModal('modalAddCategory'); showToast("تم إضافة الصنف للفريزر!");
+};
+
+// دالة تعديل الأسعار والرصيد من الفريزر مباشرة
+window.editFreezerItem = (id, currentStock, currentPrice, name) => {
+    const newQty = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
+    if(newQty === null) return; // لو عمل إلغاء
+    
+    const newPrice = prompt(`تعديل سعر صنف (${name}) بالجنيه:`, currentPrice);
+    if(newPrice !== null) {
+        update(ref(db, `inventory/freezerStock`), { [id]: parseInt(newQty) || 0 });
+        update(ref(db, `inventory/freezerConfig/${id}`), { price: parseFloat(newPrice) || 0 });
+        showToast("تم تحديث الرصيد والسعر بنجاح 👍");
+    }
+};
+
+onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
+    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
+    Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
+        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
+        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${log.items[k]}`).join(' | ');
+        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong></div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
+    });
+    const el = document.getElementById('freezerLogs'); if(el) el.innerHTML = html || '<div style="text-align:center;">لا توجد سجلات</div>';
+});
+
+
+// ================= 5. الدفعات والذبح الديناميكي =================
 window.saveNewBatch = async () => {
     const name = document.getElementById('bName')?.value || '';
     const eggs = parseInt(document.getElementById('bEggs')?.value) || 0;
@@ -223,7 +287,7 @@ window.saveNewBatch = async () => {
         order: Date.now()
     });
     
-    closeModal('modalBatch'); showToast(`تم تسجيل الدفعة وتحديد مواعيدها`);
+    closeModal('modalBatch'); showToast(`تم تسجيل الدفعة بدقة`);
 };
 
 window.openEditBatch = (id) => {
@@ -251,13 +315,34 @@ window.saveEditBatch = async () => {
     const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
 
     await update(ref(db, `batches/${id}`), { name: newName, initialEggs: newEggs, insertDate: newDateStr, hatcherDate: hatcherD.toISOString(), hatchDate: hatchD.toISOString(), rearDate: rearD.toISOString() });
-    closeModal('modalEditBatch'); showToast("تم تحديث الدفعة وإعادة حساب التواريخ");
+    closeModal('modalEditBatch'); showToast("تم تحديث الدفعة");
+};
+
+window.updateStage = async (id, stage) => { 
+    if (stage === 'slaughter' && !confirm("⚠️ هل أنت متأكد من نقل الدفعة للذبح؟")) return;
+    await update(ref(db, `batches/${id}`), { status: stage }); 
+    showToast("تم تحديث الحالة");
+};
+
+window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
+
+window.promptHatch = (id) => { const el = document.getElementById('hatchBatchId'); if(el) el.value = id; openModal('modalHatch'); };
+
+window.moveToRearing = async () => {
+    const id = document.getElementById('hatchBatchId')?.value;
+    const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
+    const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
+    if(!id || !healthy) return showToast("أدخل العدد الصحيح", true);
+    
+    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
+    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate, rearingSystem: rearingSys, unfertilized: parseInt(document.getElementById('hUnfert')?.value)||0, deadInShell: parseInt(document.getElementById('hDead')?.value)||0 });
+    closeModal('modalHatch'); showToast("تم النقل للتربية");
 };
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
     const eggPrice = batch.birdType === 'turkey' ? (globalSettings.turkeyEgg || 10) : (batch.birdType === 'chicken' ? 15 : 2);
-    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟ (السعر: ${eggPrice} ج.م)`, "0");
+    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟ (سعر البيضة: ${eggPrice} ج.م)`, "0");
     if(qty && !isNaN(qty) && parseInt(qty) > 0) {
         const sellQty = parseInt(qty);
         if(sellQty > batch.initialEggs) return showToast("العدد أكبر من المتاح!", true);
@@ -270,44 +355,62 @@ window.sellEggsFromIncubator = async (batchId) => {
 };
 
 window.moveBatchUp = async (id) => {
-    const batchesArr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
-    const currentIndex = batchesArr.findIndex(b => b.id === id);
-    if(currentIndex > 0) {
-        await update(ref(db, `batches/${batchesArr[currentIndex - 1].id}`), { order: batchesArr[currentIndex].order });
-        await update(ref(db, `batches/${id}`), { order: batchesArr[currentIndex - 1].order });
-    }
+    const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const idx = arr.findIndex(b => b.id === id);
+    if(idx > 0) { await update(ref(db, `batches/${arr[idx - 1].id}`), { order: arr[idx].order }); await update(ref(db, `batches/${id}`), { order: arr[idx - 1].order }); }
 };
-
 window.moveBatchDown = async (id) => {
-    const batchesArr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
-    const currentIndex = batchesArr.findIndex(b => b.id === id);
-    if(currentIndex < batchesArr.length - 1) {
-        await update(ref(db, `batches/${batchesArr[currentIndex + 1].id}`), { order: batchesArr[currentIndex].order });
-        await update(ref(db, `batches/${id}`), { order: batchesArr[currentIndex + 1].order });
-    }
+    const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const idx = arr.findIndex(b => b.id === id);
+    if(idx < arr.length - 1) { await update(ref(db, `batches/${arr[idx + 1].id}`), { order: arr[idx].order }); await update(ref(db, `batches/${id}`), { order: arr[idx + 1].order }); }
 };
 
-window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
-
-window.updateStage = async (id, stage) => { 
-    if (stage === 'slaughter' && !confirm("⚠️ نقل الدفعة للذبح؟ لا يمكن التراجع بسهولة!")) return;
-    await update(ref(db, `batches/${id}`), { status: stage }); showToast("تم تحديث الحالة بنجاح");
-};
-
-window.promptHatch = (id) => { 
-    const el = document.getElementById('hatchBatchId'); if(el) el.value = id; 
-    openModal('modalHatch'); 
-};
-
-window.moveToRearing = async () => {
-    const id = document.getElementById('hatchBatchId')?.value;
-    const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
-    const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
-    if(!id || !healthy) return showToast("أدخل العدد الصحيح", true);
+// حل مشكلة التصنيف (توليد المدخلات ديناميكياً داخل النافذة)
+window.promptClassify = (id) => { 
+    const classIdEl = document.getElementById('classBatchId');
+    if(classIdEl) classIdEl.value = id; 
     
-    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
-    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate, rearingSystem: rearingSys, unfertilized: parseInt(document.getElementById('hUnfert')?.value)||0, deadInShell: parseInt(document.getElementById('hDead')?.value)||0 });
-    closeModal('modalHatch'); showToast("تم النقل للتربية");
+    // استهداف الشبكة جوه الـ Modal القديم عشان نحط فيها الأصناف اللي في قاعدة البيانات
+    const modalGrid = document.querySelector('#modalClassify .grid-2');
+    if(modalGrid) {
+        modalGrid.innerHTML = ''; 
+        Object.keys(dynamicFreezerConfig).forEach(catId => {
+            modalGrid.innerHTML += `
+            <div>
+                <label>${dynamicFreezerConfig[catId].name}</label>
+                <input type="number" id="c_${catId}" value="0" onclick="this.select()">
+            </div>`;
+        });
+    }
+    openModal('modalClassify'); 
+};
+
+window.finishSlaughter = async () => {
+    const classIdEl = document.getElementById('classBatchId');
+    const id = classIdEl ? classIdEl.value : null;
+    if(!id) return;
+    
+    let yieldTotal = 0; const toAdd = {};
+    
+    // قراءة القيم من المدخلات الديناميكية
+    Object.keys(dynamicFreezerConfig).forEach(catId => { 
+        const inputEl = document.getElementById(`c_${catId}`);
+        const val = inputEl ? (parseInt(inputEl.value) || 0) : 0; 
+        toAdd[catId] = val; 
+        yieldTotal += val; 
+    });
+    
+    if(yieldTotal === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
+
+    const stockSnap = await get(ref(db, "inventory/freezerStock")); 
+    let currentStock = stockSnap.exists() ? stockSnap.val() : {};
+    Object.keys(toAdd).forEach(catId => currentStock[catId] = (currentStock[catId]||0) + toAdd[catId]);
+    
+    await set(ref(db, "inventory/freezerStock"), currentStock);
+    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, birdType: allBatches[id].birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
+    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
+    
+    closeModal('modalClassify'); showToast("تم تصنيف الدفعة والترحيل للفريزر ❄️");
 };
 
 // ================= 6. المبيعات والمصروفات =================
@@ -377,73 +480,7 @@ window.resetSystem = async () => {
     }
 };
 
-// ================= 7. كابينة الذبح الفائقة (Slaughter Cockpit) =================
-let activeCockpitBatchId = null;
-
-window.promptClassify = (id) => { 
-    activeCockpitBatchId = id;
-    document.getElementById('cockpitBatchName').innerText = `دفعة: ${allBatches[id].name}`;
-    const grid = document.getElementById('cockpitInputsGrid');
-    grid.innerHTML = '';
-    
-    const ids = Object.keys(dynamicFreezerConfig);
-    if(ids.length === 0) return alert("الرجاء إضافة أصناف للفريزر من الإعدادات أولاً!");
-
-    ids.forEach((catId, index) => {
-        grid.innerHTML += `<div class="cockpit-input-card">
-            <span style="font-size: 16px; color: var(--text-secondary);">${dynamicFreezerConfig[catId].name}</span>
-            <input type="number" id="cockpit_in_${catId}" data-index="${index}" value="0" oninput="calculateCockpitTotal()" onclick="this.select()">
-        </div>`;
-    });
-
-    document.getElementById('slaughterCockpit').style.display = 'flex';
-    document.getElementById('cockpitTotalDisplay').innerText = '0';
-
-    setTimeout(() => {
-        const firstInput = document.querySelector('#cockpitInputsGrid input');
-        if(firstInput) firstInput.focus();
-        document.querySelectorAll('#cockpitInputsGrid input').forEach(input => {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const nextInput = document.querySelector(`#cockpitInputsGrid input[data-index="${parseInt(input.getAttribute('data-index')) + 1}"]`);
-                    if(nextInput) nextInput.focus(); else document.querySelector('.cockpit-footer button').focus();
-                }
-            });
-        });
-    }, 200);
-};
-
-window.closeSlaughterCockpit = () => { document.getElementById('slaughterCockpit').style.display = 'none'; activeCockpitBatchId = null; };
-
-window.calculateCockpitTotal = () => {
-    let total = 0; document.querySelectorAll('#cockpitInputsGrid input').forEach(inp => total += parseInt(inp.value) || 0);
-    document.getElementById('cockpitTotalDisplay').innerText = total;
-};
-
-window.submitSlaughterCockpit = async () => {
-    if(!activeCockpitBatchId) return;
-    const id = activeCockpitBatchId; let yieldTotal = 0; const toAdd = {};
-    
-    Object.keys(dynamicFreezerConfig).forEach(catId => {
-        const val = parseInt(document.getElementById(`cockpit_in_${catId}`).value) || 0;
-        toAdd[catId] = val; yieldTotal += val;
-    });
-
-    if(yieldTotal === 0 && !confirm("⚠️ ترحيل بأرقام صفرية؟")) return;
-
-    const stockSnap = await get(ref(db, "inventory/freezerStock"));
-    let currentStock = stockSnap.exists() ? stockSnap.val() : {};
-    Object.keys(toAdd).forEach(catId => currentStock[catId] = (currentStock[catId] || 0) + toAdd[catId]);
-    
-    await set(ref(db, "inventory/freezerStock"), currentStock);
-    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
-    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
-
-    closeSlaughterCockpit(); showToast(`🚀 تم تجميد ${yieldTotal} طائر!`);
-};
-
-// ================= 8. رندر الداشبورد والإشعارات الذكية =================
+// ================= 7. رندر الداشبورد والعنابر =================
 onValue(ref(db, "batches"), (snapshot) => { 
     allBatches = snapshot.exists() ? snapshot.val() : {}; 
     renderBatches(); 
@@ -513,7 +550,7 @@ function renderBatches() {
                 </div>
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>تاريخ الدخول:</span> <strong>${formatDateTime(b.insertDate)}</strong></div>
-                    <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
+                    <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس المتوقع:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
                     <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
@@ -524,7 +561,7 @@ function renderBatches() {
                         <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
                         <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
                         <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
-                        <button onclick="openEditBatch('${id}')" title="تعديل شامل" style="color: var(--info);">✏️</button>
+                        <button onclick="openEditBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
                         <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
                     </div>
                     <div style="display:flex; gap:5px;">${actionBtn}</div>
@@ -571,7 +608,7 @@ function renderBatches() {
                         <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
                         <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
                         <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
-                        <button onclick="openEditBatch('${id}')" title="تعديل شامل" style="color: var(--info);">✏️</button>
+                        <button onclick="openEditBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
                         <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
                     </div>
                     <div style="display:flex; gap:5px;">${actionBtn}</div>
@@ -579,7 +616,7 @@ function renderBatches() {
             </div>`;
         } else if (b.status === 'rearing') {
             const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive; 
-            const age = Math.floor((now - new Date(b.hatchDate)) / 86400000); 
+            const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
             if(ui.dSelect) ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
             
             if (daysToSlaughter > 0 && daysToSlaughter <= 3) {
@@ -637,107 +674,7 @@ function renderBatches() {
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
-// ================= رندر الفريزر الجديد (مع حماية الفريزر الفاضي) =================
-onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
-    dynamicFreezerConfig = snapshot.exists() ? snapshot.val() : {};
-    
-    // تحديث قائمة المبيعات أوتوماتيكياً
-    const saleSelect = document.getElementById('sGrade');
-    if(saleSelect) {
-        saleSelect.innerHTML = '<option value="">-- اختر الصنف --</option>';
-        Object.keys(dynamicFreezerConfig).forEach(id => {
-            saleSelect.innerHTML += `<option value="${id}">${dynamicFreezerConfig[id].name}</option>`;
-        });
-    }
-
-    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
-        const stock = stockSnap.exists() ? stockSnap.val() : {};
-        const grid = document.getElementById('freezerGrid');
-        const dashTotal = document.getElementById('dashFreezer');
-        if(!grid) return;
-        
-        grid.innerHTML = ''; let totalCount = 0;
-        const configKeys = Object.keys(dynamicFreezerConfig);
-        
-        // لو الفريزر لسه فاضي ومفيش أصناف اتعملت
-        if(configKeys.length === 0) {
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 30px; border: 2px dashed var(--border); border-radius: 12px; color: var(--text-secondary);">
-                <i class="fas fa-box-open" style="font-size: 40px; margin-bottom: 10px; color: var(--warning);"></i><br>
-                الفريزر فارغ حالياً.<br>اضغط على <b>(+ صنف جديد)</b> بالأعلى لإضافة (رويال، جامبو، إلخ).
-            </div>`;
-        } else {
-            // لو فيه أصناف، ارسم الكروت
-            configKeys.forEach(id => {
-                const item = dynamicFreezerConfig[id]; const qty = stock[id] || 0; totalCount += qty;
-                grid.innerHTML += `
-                    <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" style="cursor:pointer; text-align:center; padding:15px; margin:0; border: 2px solid transparent;">
-                        <h4 style="margin:0; color:var(--text-secondary); font-size:16px;">${item.name}</h4>
-                        <div style="font-size:32px; font-weight:900; color:var(--primary); margin:10px 0;">${qty} <span style="font-size:14px;">جوز</span></div>
-                        <div style="font-size:13px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px; border-radius: 6px;">السعر: ${item.price} ج.م <i class="fas fa-edit"></i></div>
-                    </div>`;
-            });
-        }
-        if(dashTotal) dashTotal.innerText = totalCount;
-    });
-});
-
-
-    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
-        const stock = stockSnap.exists() ? stockSnap.val() : {};
-        const grid = document.getElementById('freezerGrid');
-        const dashTotal = document.getElementById('dashFreezer');
-        if(!grid) return;
-        grid.innerHTML = ''; let totalCount = 0;
-        Object.keys(dynamicFreezerConfig).forEach(id => {
-            const item = dynamicFreezerConfig[id]; const qty = stock[id] || 0; totalCount += qty;
-            grid.innerHTML += `
-                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" style="cursor:pointer; text-align:center; padding:15px; margin:0;">
-                    <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
-                    <div style="font-size:28px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
-                    <div style="font-size:12px; color:var(--success); font-weight:bold;">${item.price} ج.م</div>
-                </div>`;
-        });
-        if(dashTotal) dashTotal.innerText = totalCount;
-    });
-});
-
-window.addNewCategory = async () => {
-    const name = document.getElementById('newCatName').value;
-    const price = parseFloat(document.getElementById('newCatPrice').value);
-    if(!name || !price) return showToast("أكمل البيانات", true);
-    const id = name.replace(/\s+/g, '_').toLowerCase(); 
-    await set(ref(db, `inventory/freezerConfig/${id}`), { name, price });
-    await set(ref(db, `inventory/freezerStock/${id}`), 0);
-    closeModal('modalAddCategory'); showToast("تم إضافة الصنف الجديد");
-};
-
-window.editFreezerItem = (id, currentStock, currentPrice, name) => {
-    const newQty = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
-    const newPrice = prompt(`تعديل سعر صنف (${name}):`, currentPrice);
-    if(newQty !== null && newPrice !== null) {
-        update(ref(db, `inventory/freezerStock`), { [id]: parseInt(newQty) });
-        update(ref(db, `inventory/freezerConfig/${id}`), { price: parseFloat(newPrice) });
-        showToast("تم التحديث بنجاح");
-    }
-};
-
-onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; 
-    const logsEl = document.getElementById('freezerLogs');
-    if(!logsEl) return;
-    let html = ''; const now = new Date();
-    Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
-        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
-        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${log.items[k]}`).join(' | ');
-        html += `<div style="background:var(--bg-main); padding:12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--info);">
-            <div style="display:flex; justify-content:space-between;"><strong>${log.batchName}</strong><span style="font-size:11px;">منذ ${daysOld} يوم</span></div>
-            <div style="color:var(--text-secondary); font-size:12px; margin:5px 0;">تاريخ: ${log.dateAdded}</div>
-            <div style="font-weight:bold; color:var(--primary); font-size:13px;">${itemsStr}</div></div>`;
-    });
-    logsEl.innerHTML = html || '<div style="text-align:center;">لا توجد سجلات</div>';
-});
-
-// ================= 10. رندر الماليات والتقارير =================
+// ================= 8. التقارير والماليات =================
 onValue(ref(db, "ledger"), (snapshot) => {
     allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
     Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
@@ -753,7 +690,8 @@ onValue(ref(db, "ledger"), (snapshot) => {
     if(document.getElementById('totalExp')) document.getElementById('totalExp').innerText = tOut;
     if(document.getElementById('netProfit')) document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; 
     if(document.getElementById('dashSales')) document.getElementById('dashSales').innerText = tIn;
-    if(document.getElementById('ledgerList')) document.getElementById('ledgerList').innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
+    const lList = document.getElementById('ledgerList');
+    if(lList) lList.innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
     
     if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
     updateCashDisplay();
@@ -783,7 +721,7 @@ window.generateBatchReport = () => {
     container.style.display = 'block';
 };
 
-// ================= 11. دليل العامل والمهام الذكية =================
+// ================= 9. المساعد الذكي للتربية (دليل العامل) =================
 function getQuailDailyNeeds(age, aliveCount, system) {
     let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
     if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
@@ -806,9 +744,11 @@ window.openDailyGuide = (id) => {
     const b = allBatches[id];
     if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
 
-    const age = Math.floor((new Date() - new Date(b.hatchDate)) / 86400000) || 1; 
+    const now = new Date();
+    const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
     const alive = b.hatchedChicks - (b.totalDead || 0);
     const system = b.rearingSystem || 'floor';
+
     const needs = getQuailDailyNeeds(age, alive, system);
 
     document.getElementById('dailyGuideContent').innerHTML = `
@@ -832,7 +772,7 @@ window.openDailyGuide = (id) => {
                 <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
             </div>
             <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
-                <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات أو الإضافات بالماء اليوم</div>
+                <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات اليوم</div>
                 <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
             </div>
             <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
@@ -846,32 +786,31 @@ window.openDailyGuide = (id) => {
     openModal('modalDailyGuide');
 };
 
-// ================= 12. نظام البحث والإنتاجية (Ctrl+K) =================
-const systemCommands = [
-    { id: 'nav_dash', title: 'لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
-    { id: 'nav_inc', title: 'المفرخ', icon: 'fas fa-egg', action: () => switchPage('incubator') },
-    { id: 'nav_rear', title: 'التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
-    { id: 'nav_freezer', title: 'الفريزر', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
-    { id: 'nav_finance', title: 'الحسابات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
-    { id: 'act_batch', title: 'إضافة دفعة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
-    { id: 'act_feed', title: 'شراء علف 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
-    { id: 'act_sale', title: 'تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') }
+// ================= 10. نظام الإنتاجية (Ctrl+K) =================
+const sysCmds = [
+    { title: 'الانتقال إلى: لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
+    { title: 'الانتقال إلى: المفرخ', icon: 'fas fa-egg', action: () => switchPage('incubator') },
+    { title: 'الانتقال إلى: التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
+    { title: 'الانتقال إلى: الفريزر', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
+    { title: 'الانتقال إلى: الحسابات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
+    { title: 'إضافة دفعة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
+    { title: 'شراء علف 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
+    { title: 'تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') }
 ];
-
-window.openCommandPalette = () => { document.getElementById('commandPalette')?.classList.add('active'); setTimeout(() => document.getElementById('cmdInput')?.focus(), 100); renderCmdResults(''); };
-window.closeCommandPalette = () => { document.getElementById('commandPalette')?.classList.remove('active'); const inp = document.getElementById('cmdInput'); if(inp) inp.value = ''; };
+window.openCommandPalette = () => { const cp = document.getElementById('commandPalette'); if(!cp) return; cp.classList.add('active'); setTimeout(() => document.getElementById('cmdInput')?.focus(), 100); renderCmdResults(''); };
+window.closeCommandPalette = () => { const cp = document.getElementById('commandPalette'); if(cp) cp.classList.remove('active'); const inp = document.getElementById('cmdInput'); if(inp) inp.value = ''; };
 
 const renderCmdResults = (query) => {
-    const container = document.getElementById('cmdResults'); if(!container) return; container.innerHTML = '';
-    const filtered = systemCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()));
-    if(filtered.length === 0) return container.innerHTML = `<div style="padding:15px; text-align:center;">لا توجد أوامر</div>`;
-    filtered.forEach(cmd => {
+    const c = document.getElementById('cmdResults'); if(!c) return; c.innerHTML = '';
+    const f = sysCmds.filter(cmd => cmd.title.toLowerCase().includes(query.toLowerCase()));
+    if(f.length === 0) return c.innerHTML = `<div style="padding:15px; text-align:center;">لا توجد أوامر</div>`;
+    f.forEach(cmd => {
         const el = document.createElement('div');
         el.innerHTML = `<i class="${cmd.icon}" style="color:var(--primary); width:20px;"></i> <b>${cmd.title}</b>`;
         el.style.cssText = `padding:12px; cursor:pointer; border-radius:8px; display:flex; align-items:center; gap:10px; transition:0.2s;`;
         el.onmouseover = () => el.style.background = 'rgba(37,99,235,0.1)'; el.onmouseout = () => el.style.background = 'transparent';
         el.onclick = () => { closeCommandPalette(); cmd.action(); };
-        container.appendChild(el);
+        c.appendChild(el);
     });
 };
 
