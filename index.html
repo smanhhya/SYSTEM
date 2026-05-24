@@ -120,6 +120,37 @@
         .freezer-log:hover { transform: translateX(-4px); background: rgba(148, 163, 184, 0.05);}
         .freezer-tag-new { background: var(--success); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
         .freezer-tag-old { background: var(--danger); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
+                /* ================= إصلاحات شاشة الموبايل (طوارئ) ================= */
+        @media (max-width: 767px) {
+            /* 1. رفع الزرار العائم (الصاعق) عشان مايستخباش تحت القائمة السفلية */
+            .fab-container { 
+                bottom: 110px !important; 
+                right: 15px !important; 
+            }
+            
+            /* 2. تظبيط زرار "إضافة دفعة" عشان ياخد عرض الشاشة ومايطلعش بره */
+            .header-title { 
+                flex-direction: column; 
+                align-items: flex-start; 
+                gap: 15px; 
+            }
+            .header-title div { 
+                width: 100%; 
+            }
+            .header-title button { 
+                width: 100%; 
+                padding: 12px !important; 
+                font-size: 16px !important; 
+                justify-content: center;
+            }
+
+            /* 3. تأكيد إن القائمة السفلية الزراير بتاعتها شغالة باللمس */
+            .nav-item { 
+                cursor: pointer; 
+                -webkit-tap-highlight-color: transparent; 
+            }
+        }
+
     </style>
 </head>
 <body>
