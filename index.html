@@ -218,6 +218,41 @@
             .setting-row { flex-direction: column; align-items: flex-start; gap: 12px; }
             .setting-row input, .setting-row select { width: 100% !important; }
         }
+        /* ================= ستايل قسم المظهر (Appearance) ================= */
+        .theme-option {
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--surface);
+        }
+        .theme-option:hover {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.05);
+            transform: translateY(-2px);
+        }
+        .theme-option.active {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--primary) inset;
+        }
+        .color-circle {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 3px solid transparent;
+        }
+        .color-circle:hover {
+            transform: scale(1.15);
+        }
+        .color-circle.active {
+            border-color: var(--text-primary);
+            transform: scale(1.1);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
 
     </style>
 </head>
@@ -343,20 +378,37 @@
                         </div>
                     </div>
 
-                    <div id="tab-appearance" class="settings-tab">
-                        <h2><i class="fas fa-paint-brush"></i> Appearance</h2>
-                        <p class="settings-desc">تحكم في كل لون وحركة داخل النظام لراحتك النفسية.</p>
+                                        <div id="tab-appearance" class="settings-tab">
+                        <h2><i class="fas fa-paint-brush"></i> Appearance & Themes</h2>
+                        <p class="settings-desc">تحكم في ألوان النظام والوضع الليلي لراحة عينيك.</p>
                         
                         <div class="settings-card">
-                            <div class="setting-row">
-                                <div>
-                                    <h4>الوضع الليلي (Dark Mode)</h4>
-                                    <span>تفعيل الواجهة الداكنة المريحة للعين</span>
+                            <h4 style="margin-bottom: 15px;">الوضع العام (System Theme)</h4>
+                            <div class="grid-2" style="gap: 15px;">
+                                <div class="theme-option" onclick="setThemeMode('light', this)">
+                                    <i class="fas fa-sun" style="font-size: 24px; margin-bottom: 10px; color: #f59e0b;"></i>
+                                    <div style="font-weight: bold;">الوضع الفاتح (Light)</div>
                                 </div>
-                                <button class="btn btn-warning">قريباً في المرحلة 2</button>
+                                <div class="theme-option" onclick="setThemeMode('dark', this)">
+                                    <i class="fas fa-moon" style="font-size: 24px; margin-bottom: 10px; color: #3b82f6;"></i>
+                                    <div style="font-weight: bold;">الوضع الليلي (Dark)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <h4 style="margin-bottom: 15px;">لون النظام الأساسي (Accent Color)</h4>
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div class="color-circle" style="background: #2563eb;" onclick="setPrimaryColor('#2563eb', this)" title="أزرق (افتراضي)"></div>
+                                <div class="color-circle" style="background: #10b981;" onclick="setPrimaryColor('#10b981', this)" title="أخضر طبي"></div>
+                                <div class="color-circle" style="background: #8b5cf6;" onclick="setPrimaryColor('#8b5cf6', this)" title="بنفسجي"></div>
+                                <div class="color-circle" style="background: #f43f5e;" onclick="setPrimaryColor('#f43f5e', this)" title="أحمر وردي"></div>
+                                <div class="color-circle" style="background: #f59e0b;" onclick="setPrimaryColor('#f59e0b', this)" title="عنبري"></div>
+                                <div class="color-circle" style="background: #0f172a;" onclick="setPrimaryColor('#0f172a', this)" title="كحلي داكن"></div>
                             </div>
                         </div>
                     </div>
+
 
                     <div id="tab-farmOps" class="settings-tab">
                         <h2><i class="fas fa-tractor"></i> Farm Operations</h2>
