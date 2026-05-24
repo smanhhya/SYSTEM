@@ -1,12 +1,11 @@
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
 
-// ================= 1. المتغيرات العامة (State Management) =================
 let allBatches = {};
 let allTransactions = {};
 let allFreezerLogs = {};
 let manualCash = 0; 
-let currentFeedStock = 0;
+let currentFeedStock = 0; // متغير المخزن
 
 // الأيقونات والأسماء لتوضيح النوع بلمحة بصرية
 const birdStandards = {
@@ -21,18 +20,70 @@ let globalSettings = {
 };
 const gradeNames = { royal: 'رويال', super_special: 'سوبر سبشيال', special: 'سبشيال', jumbo: 'جامبو', super: 'سوبر', bad: 'كسر/فرز' };
 
-// ================= 2. واجهة المستخدم والتبديل =================
+// حل مشكلة التبديل الآمن بين الصفحات
 window.switchPage = (pageId) => {
     const e = window.event;
     switchPage(pageId, e ? e.currentTarget : null);
 };
-
+// التبديل بين تبويبات الإعدادات
 window.switchSettingsTab = (tabId, element) => {
+    // إزالة الأكتيف من كل الزراير والتبويبات
     document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.settings-tab').forEach(el => el.classList.remove('active'));
+    
+    // إضافة الأكتيف للزرار والتبويب المطلوب
     element.classList.add('active');
     document.getElementById(`tab-${tabId}`).classList.add('active');
 };
+// ================= إعدادات المظهر والـ Themes =================
+
+// تطبيق الإعدادات المحفوظة أول ما الموقع يفتح
+const savedTheme = localStorage.getItem('erp_theme') || 'light';
+const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
+document.documentElement.setAttribute('data-theme', savedTheme);
+document.documentElement.style.setProperty('--primary', savedColor);
+
+window.setThemeMode = (mode, el) => {
+    document.documentElement.setAttribute('data-theme', mode);
+    localStorage.setItem('erp_theme', mode);
+    
+    // تحديث شكل الأزرار (Active state)
+    if(el) {
+        const siblings = el.parentElement.querySelectorAll('.theme-option');
+        siblings.forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    }
+    
+    // إعادة رسم الرسم البياني في الداشبورد عشان ألوانه تتحدث مع الـ Dark Mode!
+    if(window.renderDashboardChart) window.renderDashboardChart(); 
+    
+    showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
+};
+
+window.setPrimaryColor = (color, el) => {
+    document.documentElement.style.setProperty('--primary', color);
+    localStorage.setItem('erp_primary_color', color);
+    
+    // تحديث شكل الدوائر (Active state)
+    if(el) {
+        const siblings = el.parentElement.querySelectorAll('.color-circle');
+        siblings.forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    }
+    
+    showToast("تم تغيير لون النظام بنجاح 🎨");
+};
+
+// تظبيط الـ Active Classes عند فتح صفحة الإعدادات
+document.addEventListener('DOMContentLoaded', () => {
+    if(savedTheme === 'dark') {
+        const darkBtn = document.querySelectorAll('.theme-option')[1];
+        if(darkBtn) darkBtn.classList.add('active');
+    } else {
+        const lightBtn = document.querySelectorAll('.theme-option')[0];
+        if(lightBtn) lightBtn.classList.add('active');
+    }
+});
 
 window.openModal = (id) => {
     if(id === 'modalBatch') {
@@ -52,49 +103,7 @@ window.closeModal = closeModal;
 window.toggleFab = toggleFab;
 window.showToast = showToast;
 
-// ================= 3. إعدادات المظهر والـ Themes =================
-const savedTheme = localStorage.getItem('erp_theme') || 'light';
-const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
-document.documentElement.setAttribute('data-theme', savedTheme);
-document.documentElement.style.setProperty('--primary', savedColor);
-
-window.setThemeMode = (mode, el) => {
-    document.documentElement.setAttribute('data-theme', mode);
-    localStorage.setItem('erp_theme', mode);
-    
-    if(el) {
-        const siblings = el.parentElement.querySelectorAll('.theme-option');
-        siblings.forEach(s => s.classList.remove('active'));
-        el.classList.add('active');
-    }
-    
-    if(window.renderDashboardChart) window.renderDashboardChart(); 
-    showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
-};
-
-window.setPrimaryColor = (color, el) => {
-    document.documentElement.style.setProperty('--primary', color);
-    localStorage.setItem('erp_primary_color', color);
-    
-    if(el) {
-        const siblings = el.parentElement.querySelectorAll('.color-circle');
-        siblings.forEach(s => s.classList.remove('active'));
-        el.classList.add('active');
-    }
-    showToast("تم تغيير لون النظام بنجاح 🎨");
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    if(savedTheme === 'dark') {
-        const darkBtn = document.querySelectorAll('.theme-option')[1];
-        if(darkBtn) darkBtn.classList.add('active');
-    } else {
-        const lightBtn = document.querySelectorAll('.theme-option')[0];
-        if(lightBtn) lightBtn.classList.add('active');
-    }
-});
-
-// ================= 4. إدارة المخزون والخزنة والإعدادات =================
+// ================= مراقبة مخزن العلف =================
 onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
     const feedEl = document.getElementById('feedStockDisplay');
@@ -102,6 +111,7 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     if(Object.keys(allBatches).length > 0) renderBatches();
 });
 
+// ================= شراء وتوريد العلف =================
 window.buyFeed = async () => {
     const qtyEl = document.getElementById('bfQty');
     const costEl = document.getElementById('bfTotalCost');
@@ -120,6 +130,7 @@ window.buyFeed = async () => {
     showToast(`تم إضافة ${qty} كجم للمخزن وخصم ${cost} ج.م`);
 };
 
+// ================= الخزنة والكاش =================
 onValue(ref(db, "cashBox"), (snapshot) => {
     manualCash = snapshot.exists() ? snapshot.val() : 0;
     updateCashDisplay();
@@ -153,6 +164,7 @@ window.editCashBox = async () => {
     }
 };
 
+// ================= الإعدادات =================
 onValue(ref(db, "settings"), (snapshot) => {
     if(snapshot.exists()) {
         globalSettings = { ...globalSettings, ...snapshot.val() };
@@ -188,7 +200,7 @@ window.saveSettings = async () => {
     await set(ref(db, 'settings'), newSet); showToast("تم حفظ الإعدادات بنجاح");
 };
 
-// ================= 5. دورة حياة الدفعات (Batches Lifecycle) =================
+// ================= إدارة الدفعات =================
 window.saveNewBatch = async () => {
     const nameEl = document.getElementById('bName');
     const eggsEl = document.getElementById('bEggs');
@@ -266,58 +278,7 @@ window.moveBatchDown = async (id) => {
     }
 };
 
-window.renameBatch = async (id) => {
-    const currentName = allBatches[id].name; const newName = prompt("الاسم الجديد للدفعة:", currentName);
-    if (newName && newName.trim() !== "" && newName !== currentName) { await update(ref(db, `batches/${id}`), { name: newName.trim() }); showToast("تم التغيير"); }
-};
-
-window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
-
-window.updateStage = async (id, stage) => { 
-    if (stage === 'slaughter') {
-        if (!confirm("⚠️ هل أنت متأكد؟ هذا الإجراء سينقل الدفعة لمرحلة الذبح ولا يمكن التراجع عنه بسهولة!")) {
-            return; 
-        }
-    }
-    await update(ref(db, `batches/${id}`), { status: stage }); 
-    showToast("تم تحديث حالة الدفعة بنجاح");
-};
-
-window.promptHatch = (id) => { 
-    const hatchIdEl = document.getElementById('hatchBatchId');
-    if(hatchIdEl) hatchIdEl.value = id; 
-    openModal('modalHatch'); 
-};
-
-window.moveToRearing = async () => {
-    const hatchIdEl = document.getElementById('hatchBatchId');
-    const id = hatchIdEl ? hatchIdEl.value : null;
-    if(!id) return;
-    
-    const healthyEl = document.getElementById('hHealthy');
-    const healthy = healthyEl ? parseInt(healthyEl.value) : 0;
-    
-    const rearingSysEl = document.getElementById('hRearingSystem');
-    const rearingSys = rearingSysEl ? rearingSysEl.value : 'floor';
-    
-    if(!healthy) return showToast("أدخل العدد", true);
-    
-    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
-    const unfertEl = document.getElementById('hUnfert');
-    const deadEl = document.getElementById('hDead');
-
-    await update(ref(db, `batches/${id}`), { 
-        status: 'rearing', 
-        hatchedChicks: healthy, 
-        hatchRate: hatchRate, 
-        rearingSystem: rearingSys, 
-        unfertilized: unfertEl ? (parseInt(unfertEl.value)||0) : 0, 
-        deadInShell: deadEl ? (parseInt(deadEl.value)||0) : 0 
-    });
-    closeModal('modalHatch'); showToast("تم النقل للتربية");
-};
-
-// ================= 6. العمليات اليومية والمبيعات =================
+// ================= العمليات اليومية والمبيعات =================
 window.saveDailyLog = async () => {
     const idEl = document.getElementById('dBatch');
     const deadEl = document.getElementById('dDead');
@@ -404,6 +365,13 @@ window.saveTransaction = async (type, amountOverride = null, descOverride = null
     }
 };
 
+window.renameBatch = async (id) => {
+    const currentName = allBatches[id].name; const newName = prompt("الاسم الجديد للدفعة:", currentName);
+    if (newName && newName.trim() !== "" && newName !== currentName) { await update(ref(db, `batches/${id}`), { name: newName.trim() }); showToast("تم التغيير"); }
+};
+
+window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
+
 window.deleteTransaction = async (id) => {
     if(confirm("حذف هذه المعاملة؟")) {
         const t = allTransactions[id];
@@ -413,89 +381,59 @@ window.deleteTransaction = async (id) => {
     }
 };
 
-// ================= 7. المساعد الذكي للتربية (دليل العامل) =================
-function getQuailDailyNeeds(age, aliveCount, system) {
-    let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
-    
-    if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
-    else if (age <= 7) { temp = 35; feedPerBird = 6; meds = "أملاح معدنية وأحماض أمينية"; }
-    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو ماء شرب)"; }
-    else if (age <= 14) { temp = 31; feedPerBird = 11; if(age >= 13) meds = "جرعة وقاية: كوكسيديا وكلوستريديا"; }
-    else if (age <= 21) { temp = 28; feedPerBird = 15; meds = "فيتامينات (هـ سيلينيوم) لرفع المناعة"; }
-    else if (age <= 28) { temp = 25; feedPerBird = 20; meds = "ماء نقي"; }
-    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (يمنع إعطاء أدوية لفترة السحب)"; }
-    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - الدفعة جاهزة للذبح"; }
-
-    let totalFeedKg = (feedPerBird * aliveCount) / 1000;
-    let totalWaterLiters = (totalFeedKg * 2.2); 
-    let spaceRequired = system === 'battery' ? (aliveCount / 120) : (aliveCount / 60);
-
-    return { 
-        temp: temp, 
-        feed: totalFeedKg.toFixed(2), 
-        water: totalWaterLiters.toFixed(1), 
-        space: spaceRequired.toFixed(1), 
-        meds: meds 
-    };
-}
-
-window.openDailyGuide = (id) => {
-    const b = allBatches[id];
-    if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
-
-    const now = new Date();
-    const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
-    const alive = b.hatchedChicks - (b.totalDead || 0);
-    const system = b.rearingSystem || 'floor';
-    const systemName = system === 'floor' ? 'أرضي (نشارة)' : 'بطاريات (أقفاص)';
-
-    const needs = getQuailDailyNeeds(age, alive, system);
-
-    const content = `
-        <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
-            <div style="text-align:center; margin-bottom:15px;">
-                <span style="font-size:14px; color:var(--text-secondary);">دفعة: <strong>${b.name}</strong></span><br>
-                <span style="font-size:18px; color:var(--primary); font-weight:800;">عمر: ${age} يوم</span>
-            </div>
-            
-            <div class="grid-2" style="gap:10px;">
-                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
-                    <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة المطلوبة</div>
-                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.temp} °C</div>
-                </div>
-                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--info);">
-                    <div style="font-size:12px; color:var(--text-secondary);">💧 المياه المطلوبة</div>
-                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.water} لتر</div>
-                </div>
-            </div>
-
-            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--warning);">
-                <div style="font-size:12px; color:var(--text-secondary);">🌾 كمية العلف لليوم بالكامل (${alive} طائر)</div>
-                <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
-            </div>
-
-            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
-                <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات أو الإضافات بالماء اليوم</div>
-                <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
-            </div>
-
-            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
-                <div style="font-size:12px; color:var(--text-secondary);">📏 المساحة ونوع التربية</div>
-                <div style="font-size:14px; font-weight:bold; color:var(--text-primary);">
-                    نظام: ${systemName} <br>
-                    مساحة العنبر المطلوبة: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const guideContentEl = document.getElementById('dailyGuideContent');
-    if(guideContentEl) guideContentEl.innerHTML = content;
-    openModal('modalDailyGuide');
+window.resetSystem = async () => {
+    if(confirm("🛑 سيتم مسح كل البيانات!")) {
+        if(prompt("اكتب 'تأكيد':") === 'تأكيد') {
+            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory')); await remove(ref(db, 'cashBox')); showToast("تم التصفير");
+        }
+    }
 };
 
-// ================= 8. كابينة التشغيل الفائق لغرفة الذبح =================
-let activeCockpitBatchId = null;
+window.updateStage = async (id, stage) => { 
+    if (stage === 'slaughter') {
+        if (!confirm("⚠️ هل أنت متأكد؟ هذا الإجراء سينقل الدفعة لمرحلة الذبح ولا يمكن التراجع عنه بسهولة!")) {
+            return; 
+        }
+    }
+    await update(ref(db, `batches/${id}`), { status: stage }); 
+    showToast("تم تحديث حالة الدفعة بنجاح");
+};
+
+window.promptHatch = (id) => { 
+    const hatchIdEl = document.getElementById('hatchBatchId');
+    if(hatchIdEl) hatchIdEl.value = id; 
+    openModal('modalHatch'); 
+};
+
+// حل الحماية المتوقع لو العنصر مش موجود في الـ HTML
+window.moveToRearing = async () => {
+    const hatchIdEl = document.getElementById('hatchBatchId');
+    const id = hatchIdEl ? hatchIdEl.value : null;
+    if(!id) return;
+    
+    const healthyEl = document.getElementById('hHealthy');
+    const healthy = healthyEl ? parseInt(healthyEl.value) : 0;
+    
+    const rearingSysEl = document.getElementById('hRearingSystem');
+    const rearingSys = rearingSysEl ? rearingSysEl.value : 'floor'; // تأمين لو الـ Select مش موجود
+    
+    if(!healthy) return showToast("أدخل العدد", true);
+    
+    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
+    const unfertEl = document.getElementById('hUnfert');
+    const deadEl = document.getElementById('hDead');
+
+    await update(ref(db, `batches/${id}`), { 
+        status: 'rearing', 
+        hatchedChicks: healthy, 
+        hatchRate: hatchRate, 
+        rearingSystem: rearingSys, 
+        unfertilized: unfertEl ? (parseInt(unfertEl.value)||0) : 0, 
+        deadInShell: deadEl ? (parseInt(deadEl.value)||0) : 0 
+    });
+    closeModal('modalHatch'); showToast("تم النقل للتربية");
+};
+
 
 window.promptClassify = (id) => { 
     const classIdEl = document.getElementById('classBatchId');
@@ -526,51 +464,7 @@ window.finishSlaughter = async () => {
     closeModal('modalClassify'); showToast("تم الترحيل للفريزر");
 };
 
-// ================= 9. رندر الفريزر الجديد (ديناميكي بالكامل) =================
-onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
-    const config = snapshot.exists() ? snapshot.val() : {};
-    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
-        const stock = stockSnap.exists() ? stockSnap.val() : {};
-        const grid = document.getElementById('freezerGrid');
-        const dashTotal = document.getElementById('dashFreezer');
-        
-        if(!grid) return;
-        
-        grid.innerHTML = '';
-        let totalCount = 0;
-        
-        Object.keys(config).forEach(id => {
-            const item = config[id];
-            const qty = stock[id] || 0;
-            totalCount += qty;
-            
-            grid.innerHTML += `
-                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
-                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border);">
-                    <h4 style="margin:0;">${item.name}</h4>
-                    <div style="font-size:22px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
-                    <div style="font-size:12px; color:var(--text-secondary);">السعر: ${item.price} ج.م</div>
-                </div>
-            `;
-        });
-        if(dashTotal) dashTotal.innerText = totalCount;
-    });
-});
-
-onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
-    Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
-        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
-        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new">جديد</span>' : (daysOld > 30 ? '<span class="freezer-tag-old">قديم</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`);
-        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${gradeNames[k]}: ${log.items[k]}`).join(' | ');
-        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong>${ageTag}</div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
-    });
-    
-    const freezerLogsEl = document.getElementById('freezerLogs');
-    if(freezerLogsEl) freezerLogsEl.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
-});
-
-// ================= 10. عرض البيانات (داشبورد مدمج آمن) =================
+// ================= عرض البيانات (داشبورد مدمج آمن) =================
 onValue(ref(db, "batches"), (snapshot) => { 
     allBatches = snapshot.exists() ? snapshot.val() : {}; 
     renderBatches(); 
@@ -586,6 +480,7 @@ function formatDateTime(isoString) {
     return `${d} (${t})`;
 }
 
+// دالة العرض بعد تأمين جميع العناصر
 function renderBatches() {
     const ui = { 
         inc: document.getElementById('incubatorList'), 
@@ -749,6 +644,62 @@ function renderBatches() {
     if(dashChicksEl) dashChicksEl.innerText = stats.chicks;
 }
 
+if (!document.getElementById('dynamicStyles')) {
+    const style = document.createElement('style');
+    style.id = 'dynamicStyles';
+    style.innerHTML = `@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }`;
+    document.head.appendChild(style);
+}
+
+// ================= رندر الفريزر الجديد (ديناميكي بالكامل) =================
+onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
+    const config = snapshot.exists() ? snapshot.val() : {};
+    
+    // هنسحب كمان الأرصدة عشان نحطها جنب الأسماء
+    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
+        const stock = stockSnap.exists() ? stockSnap.val() : {};
+        const grid = document.getElementById('freezerGrid');
+        const dashTotal = document.getElementById('dashFreezer');
+        
+        if(!grid) return;
+        
+        grid.innerHTML = '';
+        let totalCount = 0;
+        
+        Object.keys(config).forEach(id => {
+            const item = config[id];
+            const qty = stock[id] || 0;
+            totalCount += qty; // بنحسب الإجمالي عشان الداشبورد
+            
+            grid.innerHTML += `
+                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
+                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border);">
+                    <h4 style="margin:0;">${item.name}</h4>
+                    <div style="font-size:22px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
+                    <div style="font-size:12px; color:var(--text-secondary);">السعر: ${item.price} ج.م</div>
+                </div>
+            `;
+        });
+        
+        // تحديث إجمالي الفريزر في الداشبورد
+        if(dashTotal) dashTotal.innerText = totalCount;
+    });
+});
+
+
+onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
+    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
+    Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
+        const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
+        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new">جديد</span>' : (daysOld > 30 ? '<span class="freezer-tag-old">قديم</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`);
+        let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${gradeNames[k]}: ${log.items[k]}`).join(' | ');
+        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong>${ageTag}</div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
+    });
+    
+    const freezerLogsEl = document.getElementById('freezerLogs');
+    if(freezerLogsEl) freezerLogsEl.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
+});
+
 onValue(ref(db, "ledger"), (snapshot) => {
     allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
     Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
@@ -798,25 +749,91 @@ window.generateBatchReport = () => {
     container.style.display = 'block';
 };
 
-window.resetSystem = async () => {
-    if(confirm("🛑 سيتم مسح كل البيانات!")) {
-        if(prompt("اكتب 'تأكيد':") === 'تأكيد') {
-            await remove(ref(db, 'batches')); await remove(ref(db, 'ledger')); await remove(ref(db, 'inventory')); await remove(ref(db, 'cashBox')); showToast("تم التصفير");
-        }
-    }
-};
+// ================= المساعد الذكي للتربية (دليل العامل) =================
+function getQuailDailyNeeds(age, aliveCount, system) {
+    let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
+    
+    if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
+    else if (age <= 7) { temp = 35; feedPerBird = 6; meds = "أملاح معدنية وأحماض أمينية"; }
+    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو ماء شرب)"; }
+    else if (age <= 14) { temp = 31; feedPerBird = 11; if(age >= 13) meds = "جرعة وقاية: كوكسيديا وكلوستريديا"; }
+    else if (age <= 21) { temp = 28; feedPerBird = 15; meds = "فيتامينات (هـ سيلينيوم) لرفع المناعة"; }
+    else if (age <= 28) { temp = 25; feedPerBird = 20; meds = "ماء نقي"; }
+    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (يمنع إعطاء أدوية لفترة السحب)"; }
+    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - الدفعة جاهزة للذبح"; }
 
-if (!document.getElementById('dynamicStyles')) {
-    const style = document.createElement('style');
-    style.id = 'dynamicStyles';
-    style.innerHTML = `@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }`;
-    document.head.appendChild(style);
+    let totalFeedKg = (feedPerBird * aliveCount) / 1000;
+    let totalWaterLiters = (totalFeedKg * 2.2); 
+    let spaceRequired = system === 'battery' ? (aliveCount / 120) : (aliveCount / 60);
+
+    return { 
+        temp: temp, 
+        feed: totalFeedKg.toFixed(2), 
+        water: totalWaterLiters.toFixed(1), 
+        space: spaceRequired.toFixed(1), 
+        meds: meds 
+    };
 }
 
-// ================= 11. نظام الإنتاجية (Command Palette Ctrl+K) =================
+window.openDailyGuide = (id) => {
+    const b = allBatches[id];
+    if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
+
+    const now = new Date();
+    const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
+    const alive = b.hatchedChicks - (b.totalDead || 0);
+    const system = b.rearingSystem || 'floor';
+    const systemName = system === 'floor' ? 'أرضي (نشارة)' : 'بطاريات (أقفاص)';
+
+    const needs = getQuailDailyNeeds(age, alive, system);
+
+    const content = `
+        <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
+            <div style="text-align:center; margin-bottom:15px;">
+                <span style="font-size:14px; color:var(--text-secondary);">دفعة: <strong>${b.name}</strong></span><br>
+                <span style="font-size:18px; color:var(--primary); font-weight:800;">عمر: ${age} يوم</span>
+            </div>
+            
+            <div class="grid-2" style="gap:10px;">
+                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
+                    <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة المطلوبة</div>
+                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.temp} °C</div>
+                </div>
+                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--info);">
+                    <div style="font-size:12px; color:var(--text-secondary);">💧 المياه المطلوبة</div>
+                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.water} لتر</div>
+                </div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--warning);">
+                <div style="font-size:12px; color:var(--text-secondary);">🌾 كمية العلف لليوم بالكامل (${alive} طائر)</div>
+                <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
+                <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات أو الإضافات بالماء اليوم</div>
+                <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
+                <div style="font-size:12px; color:var(--text-secondary);">📏 المساحة ونوع التربية</div>
+                <div style="font-size:14px; font-weight:bold; color:var(--text-primary);">
+                    نظام: ${systemName} <br>
+                    مساحة العنبر المطلوبة: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const guideContentEl = document.getElementById('dailyGuideContent');
+    if(guideContentEl) guideContentEl.innerHTML = content;
+    openModal('modalDailyGuide');
+};
+// ================= نظام الإنتاجية والبحث السريع (Command Palette) =================
+
 const systemCommands = [
     { id: 'nav_dash', title: 'الانتقال إلى: لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
-    { id: 'nav_inc', title: 'الانتقال إلى: المفرخ', icon: 'fas fa-egg', action: () => switchPage('incubator') },
+    { id: 'nav_inc', title: 'الانتقال إلى: المفرخ (Incubator)', icon: 'fas fa-egg', action: () => switchPage('incubator') },
     { id: 'nav_rear', title: 'الانتقال إلى: عنابر التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
     { id: 'nav_slaugh', title: 'الانتقال إلى: الذبح والتصنيف', icon: 'fas fa-knife', action: () => switchPage('slaughter') },
     { id: 'nav_freezer', title: 'الانتقال إلى: الفريزر والمخزون', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
@@ -825,14 +842,14 @@ const systemCommands = [
     { id: 'act_batch', title: 'إجراء: إضافة دفعة جديدة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
     { id: 'act_feed', title: 'إجراء: شراء علف للمخزن 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
     { id: 'act_sale', title: 'إجراء: تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') },
-    { id: 'act_exp', title: 'إجراء: تسجيل مصروفات 💸', icon: 'fas fa-receipt', action: () => openModal('modalExpense') }
+    { id: 'act_exp', title: 'إجراء: تسجيل مصروفات 💸', icon: 'fas fa-receipt', action: () => openModal('modalExpense') },
 ];
 
 window.openCommandPalette = () => {
     const cp = document.getElementById('commandPalette');
     if(!cp) return;
     cp.classList.add('active');
-    setTimeout(() => document.getElementById('cmdInput').focus(), 100);
+    setTimeout(() => document.getElementById('cmdInput').focus(), 100); 
     renderCmdResults('');
 };
 
@@ -859,22 +876,36 @@ const renderCmdResults = (query) => {
         const el = document.createElement('div');
         el.innerHTML = `<div style="display:flex; align-items:center; gap:12px;"><i class="${cmd.icon}" style="color: var(--primary); font-size: 16px; width: 20px; text-align: center;"></i> <span style="font-size: 15px; font-weight: bold;">${cmd.title}</span></div><span style="font-size: 11px; color: var(--text-secondary);">Click</span>`;
         el.style.cssText = `padding: 12px 16px; cursor: pointer; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; color: var(--text-primary); transition: all 0.2s; margin-bottom: 4px;`;
+        
         el.onmouseover = () => { el.style.background = 'var(--primary)'; el.style.color = '#fff'; el.querySelector('i').style.color = '#fff'; el.querySelector('span:last-child').style.color = 'rgba(255,255,255,0.7)'; };
         el.onmouseout = () => { el.style.background = 'transparent'; el.style.color = 'var(--text-primary)'; el.querySelector('i').style.color = 'var(--primary)'; el.querySelector('span:last-child').style.color = 'var(--text-secondary)'; };
-        el.onclick = () => { closeCommandPalette(); cmd.action(); };
+        
+        el.onclick = () => {
+            closeCommandPalette();
+            cmd.action();
+        };
         container.appendChild(el);
     });
 };
 
 document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCommandPalette(); }
-    if (e.key === 'Escape') closeCommandPalette();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); 
+        openCommandPalette();
+    }
+    if (e.key === 'Escape') {
+        closeCommandPalette();
+    }
 });
 
 document.addEventListener('click', (e) => {
     const cp = document.getElementById('commandPalette');
-    if (cp && e.target === cp) closeCommandPalette();
+    if (cp && e.target === cp) {
+        closeCommandPalette();
+    }
 });
 
 const cmdInput = document.getElementById('cmdInput');
-if(cmdInput) cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
+if(cmdInput) {
+    cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
+}
