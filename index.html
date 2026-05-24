@@ -151,6 +151,74 @@
             }
         }
 
+                /* ================= ستايل مركز التحكم (Settings Layout) ================= */
+        .settings-layout {
+            display: flex;
+            gap: 24px;
+            height: calc(100vh - 120px);
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        .settings-sidebar {
+            width: 260px;
+            background: var(--bg-main);
+            border-left: 1px solid var(--border);
+            padding: 20px 0;
+            overflow-y: auto;
+        }
+        .settings-search {
+            margin: 0 16px 20px;
+            position: relative;
+        }
+        .settings-search input {
+            width: 100%; padding: 10px 35px 10px 10px;
+            border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+        }
+        .settings-search i {
+            position: absolute; right: 12px; top: 12px; color: var(--text-secondary);
+        }
+        .settings-group-title {
+            font-size: 11px; font-weight: 800; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 1px;
+            margin: 16px 20px 8px;
+        }
+        .settings-nav-item {
+            padding: 10px 20px; color: var(--text-primary); font-size: 14px;
+            cursor: pointer; display: flex; align-items: center; gap: 10px;
+            transition: 0.2s; border-right: 3px solid transparent;
+        }
+        .settings-nav-item:hover { background: rgba(37, 99, 235, 0.05); color: var(--primary); }
+        .settings-nav-item.active {
+            background: rgba(37, 99, 235, 0.1); color: var(--primary);
+            border-right-color: var(--primary); font-weight: bold;
+        }
+        .settings-content-area {
+            flex: 1; padding: 32px; overflow-y: auto;
+        }
+        .settings-tab { display: none; animation: fadeIn 0.3s ease-out; }
+        .settings-tab.active { display: block; }
+        .settings-desc { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+        .settings-card {
+            background: var(--bg-main); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px; margin-bottom: 16px;
+        }
+        .setting-row {
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .setting-row h4 { margin: 0 0 4px 0; font-size: 15px; }
+        .setting-row span { font-size: 12px; color: var(--text-secondary); }
+        .setting-divider { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+        
+        @media (max-width: 767px) {
+            .settings-layout { flex-direction: column; height: auto; }
+            .settings-sidebar { width: 100%; border-left: none; border-bottom: 1px solid var(--border); max-height: 250px; }
+            .settings-content-area { padding: 16px; }
+            .setting-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .setting-row input, .setting-row select { width: 100% !important; }
+        }
+
     </style>
 </head>
 <body>
@@ -220,18 +288,136 @@
             <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
         </div>
 
-        <div id="settingsPage" class="page-view">
-            <div class="header-title">إعدادات النظام ⚙️</div>
-            
-            <div class="card" style="border-left: 4px solid var(--info);">
-                <div class="card-header" style="color:var(--info);">إعدادات القطيع</div>
-                <label>نوع الطائر الافتراضي</label>
-                <select id="setBirdType">
-                    <option value="quail">سمان</option>
-                    <option value="chicken">فراخ بيضاء</option>
-                    <option value="turkey">رومي</option>
-                </select>
+                <div id="settingsPage" class="page-view">
+            <div class="header-title" style="margin-bottom: 20px;">
+                <span><i class="fas fa-sliders-h"></i> مركز التحكم الشامل (Settings)</span>
             </div>
+            
+            <div class="settings-layout">
+                <div class="settings-sidebar">
+                    <div class="settings-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="ابحث في الإعدادات...">
+                    </div>
+                    
+                    <div class="settings-group">
+                        <div class="settings-group-title">الأساسيات</div>
+                        <div class="settings-nav-item active" onclick="switchSettingsTab('general', this)"><i class="fas fa-globe"></i> General</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('appearance', this)"><i class="fas fa-paint-brush"></i> Appearance</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('farmOps', this)"><i class="fas fa-tractor"></i> Farm Operations</div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <div class="settings-group-title">النظام والبيانات</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('tables', this)"><i class="fas fa-table"></i> Tables & Data</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('backup', this)"><i class="fas fa-cloud-download-alt"></i> Backup & Sync</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('security', this)"><i class="fas fa-shield-alt"></i> Security</div>
+                    </div>
+                </div>
+
+                <div class="settings-content-area">
+                    
+                    <div id="tab-general" class="settings-tab active">
+                        <h2><i class="fas fa-globe"></i> General Settings</h2>
+                        <p class="settings-desc">إعدادات الهوية العامة للسيستم والتوطين.</p>
+                        
+                        <div class="settings-card">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>اسم النظام (System Name)</h4>
+                                    <span>الاسم الذي يظهر في أعلى القائمة والفواتير</span>
+                                </div>
+                                <input type="text" value="Saman Hehia ERP" style="width: 200px;">
+                            </div>
+                            <hr class="setting-divider">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>لغة النظام (Language)</h4>
+                                    <span>تغيير واجهة المستخدم (يتطلب إعادة تحميل)</span>
+                                </div>
+                                <select style="width: 200px;">
+                                    <option>العربية (Arabic)</option>
+                                    <option>English</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-appearance" class="settings-tab">
+                        <h2><i class="fas fa-paint-brush"></i> Appearance</h2>
+                        <p class="settings-desc">تحكم في كل لون وحركة داخل النظام لراحتك النفسية.</p>
+                        
+                        <div class="settings-card">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>الوضع الليلي (Dark Mode)</h4>
+                                    <span>تفعيل الواجهة الداكنة المريحة للعين</span>
+                                </div>
+                                <button class="btn btn-warning">قريباً في المرحلة 2</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-farmOps" class="settings-tab">
+                        <h2><i class="fas fa-tractor"></i> Farm Operations</h2>
+                        <p class="settings-desc">تسعير الإنتاج، أنواع الطيور، وتكاليف العلف التشغيلية.</p>
+                        
+                        <div class="settings-card">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>نوع الطائر الافتراضي</h4>
+                                    <span>الطائر الذي يظهر كخيار أول عند إضافة دفعة</span>
+                                </div>
+                                <select id="setBirdType" style="width: 200px;">
+                                    <option value="quail">سمان</option>
+                                    <option value="chicken">فراخ بيضاء</option>
+                                    <option value="turkey">رومي</option>
+                                </select>
+                            </div>
+                            <hr class="setting-divider">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>سعر كيلو العلف (ج.م)</h4>
+                                    <span>يُستخدم في حساب التكلفة اليومية للقطيع</span>
+                                </div>
+                                <input type="number" id="setFeed" value="30" style="width: 150px;">
+                            </div>
+                        </div>
+
+                        <div class="settings-card" style="margin-top: 20px;">
+                            <h4 style="margin-bottom: 15px; color: var(--primary);">💰 تسعير كتاكيت وبيض المفرخ</h4>
+                            <div class="grid-2">
+                                <div><label>كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
+                                <div><label>كتكوت الفراخ</label><input type="number" id="setChickenChick" value="25"></div>
+                                <div><label>كتكوت الرومي</label><input type="number" id="setTurkeyChick" value="60"></div>
+                                <div><label>بيضة الرومي</label><input type="number" id="setTurkeyEgg" value="10"></div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px; text-align: left;">
+                            <button class="btn btn-primary" onclick="saveSettings()">حفظ إعدادات التشغيل 💾</button>
+                        </div>
+                    </div>
+
+                    <div id="tab-backup" class="settings-tab">
+                        <h2><i class="fas fa-cloud-download-alt"></i> Backup & Reset</h2>
+                        <p class="settings-desc">أمان بياناتك ونسخها الاحتياطي.</p>
+                        
+                        <div class="settings-card" style="border: 1px solid var(--danger);">
+                            <div class="setting-row">
+                                <div>
+                                    <h4 style="color: var(--danger);">تصفير النظام بالكامل (Factory Reset)</h4>
+                                    <span style="color: var(--text-secondary);">سيتم مسح جميع الدفعات والمخازن والخزنة للأبد.</span>
+                                </div>
+                                <button class="btn btn-danger" onclick="resetSystem()">تأكيد التصفير ⚠️</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
             
             <div class="card">
                 <div class="card-header">أسعار التشغيل والبيع</div>
