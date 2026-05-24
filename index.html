@@ -1,215 +1,172 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>نظام إدارة المزارع - ERP الشامل</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>سمان ههيا - Farm OS</title>
     
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
     <script>
-        const savedTheme = localStorage.getItem('saman_theme') || 'light';
+        // تحميل الوضع المحفوظ قبل رندر الصفحة لمنع الوميض
+        const savedTheme = localStorage.getItem('erp_theme') || 'light';
+        const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
         document.documentElement.setAttribute('data-theme', savedTheme);
+        document.documentElement.style.setProperty('--primary', savedColor);
     </script>
 
     <style>
-        /* ================= 1. DESIGN SYSTEM VARIABLES ================= */
+        /* ================= 1. Design System & Tokens (Farm OS) ================= */
         :root {
-            --bg-main: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
-            --primary: #2563eb; --primary-hover: #1d4ed8;
-            --text-primary: #0f172a; --text-secondary: #64748b;
-            --success: #16a34a; --warning: #d97706; --danger: #dc2626; --info: #0284c7;
-            --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; --space-xxl: 32px;
-            --radius-card: 16px; --radius-btn: 12px; --radius-input: 12px;
-            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            --transition-smooth: all 0.25s ease-out;
+            --bg-main: #f8fafc;
+            --surface: #ffffff;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --accent: #0ea5e9;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+
+            --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+            --radius-md: 8px; --radius-card: 16px;
+            --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+            --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         [data-theme="dark"] {
-            --bg-main: #0f172a; --surface: #1e293b; --border: #334155;
-            --text-primary: #e2e8f0; --text-secondary: #94a3b8;
-            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #0ea5e9;
-            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+            --bg-main: #0f172a;
+            --surface: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
         }
 
-        body { font-family: 'Cairo', system-ui, sans-serif; margin: 0; padding: 0; background-color: var(--bg-main); color: var(--text-primary); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background-color 0.3s ease, color 0.3s ease; }
+        /* ================= 2. Base Typography & Layout ================= */
+        body {
+            background-color: var(--bg-main); color: var(--text-primary);
+            font-family: 'Cairo', sans-serif; line-height: 1.6; margin: 0; padding: 0;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
 
         .sidebar { display: none; }
         .main-content { min-height: 100vh; transition: var(--transition-smooth); }
 
         @media (min-width: 768px) {
             body { display: flex; } .bottom-nav { display: none !important; }
-            .sidebar { display: flex; flex-direction: column; width: 260px; height: 100vh; position: fixed; right: 0; top: 0; background: var(--surface); border-left: 1px solid var(--border); padding: var(--space-xl) var(--space-md); box-sizing: border-box; z-index: 1000; overflow-y: auto; transition: var(--transition-smooth); }
+            .sidebar { display: flex; flex-direction: column; width: 260px; height: 100vh; position: fixed; right: 0; top: 0; background: var(--surface); border-left: 1px solid var(--border); padding: var(--space-xl) var(--space-md); box-sizing: border-box; z-index: 1000; overflow-y: auto; }
             .sidebar-logo { font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: var(--space-xl); text-align: center; padding-bottom: var(--space-lg); border-bottom: 1px solid var(--border); }
-            .sidebar .nav-item { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-radius: var(--radius-btn); text-align: right; margin-bottom: var(--space-xs); flex: none; justify-content: flex-start; cursor: pointer; transition: var(--transition-smooth);}
-            .sidebar .nav-item i { margin-bottom: 0; font-size: 18px; width: 24px; text-align: center; }
-            .sidebar .nav-item span { font-size: 14px; }
-            .sidebar .nav-item:hover { background: rgba(148, 163, 184, 0.1); color: var(--text-primary); transform: translateX(-5px); }
-            .sidebar .nav-item.active { background: var(--primary); color: white; transform: none; box-shadow: var(--shadow-soft); }
+            .sidebar .nav-item { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-radius: var(--radius-md); cursor: pointer; transition: var(--transition-smooth); margin-bottom: var(--space-xs); }
+            .sidebar .nav-item i { width: 24px; text-align: center; font-size: 18px; }
+            .sidebar .nav-item:hover { background: rgba(148, 163, 184, 0.1); transform: translateX(-4px); }
+            .sidebar .nav-item.active { background: var(--primary); color: white; }
             .main-content { flex: 1; margin-right: 260px; padding: var(--space-xl) 5%; }
-            .fab-container { right: 290px; bottom: 30px; } 
         }
 
         @media (max-width: 767px) {
-            .main-content { padding-bottom: 90px; }
-            .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); opacity: 0.98; backdrop-filter: blur(10px); display: flex; justify-content: space-around; padding: var(--space-md) var(--space-xs) var(--space-xl) var(--space-xs); z-index: 1000; border-top: 1px solid var(--border); transition: var(--transition-smooth); }
-            .nav-item { text-align: center; color: var(--text-secondary); cursor: pointer; flex: 1; transition: var(--transition-smooth); }
+            .main-content { padding-bottom: 90px; padding: 20px 15px; }
+            .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); backdrop-filter: blur(10px); display: flex; justify-content: space-around; padding: 12px 5px 20px; z-index: 1000; border-top: 1px solid var(--border); }
+            .nav-item { text-align: center; color: var(--text-secondary); cursor: pointer; flex: 1; -webkit-tap-highlight-color: transparent; }
             .nav-item i { font-size: 20px; margin-bottom: 4px; display: block; }
             .nav-item span { font-size: 11px; font-weight: 600; }
             .nav-item.active { color: var(--primary); transform: translateY(-3px); }
+            .fab-container { bottom: 100px !important; right: 15px !important; }
+            .header-title { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .header-title button { width: 100%; justify-content: center; }
         }
 
-        .page-view { display: none; padding: var(--space-lg) 0; animation: fadeIn 0.2s ease-out; }
+        .page-view { display: none; animation: fadeIn 0.3s ease-out; }
         .page-view.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        .header-title { background: transparent; color: var(--text-primary); padding: var(--space-sm) 0 var(--space-xl) 0; font-size: 24px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); margin-bottom: var(--space-xl); }
-        .card { background: var(--surface); padding: var(--space-xl); border-radius: var(--radius-card); margin-bottom: var(--space-xl); box-shadow: var(--shadow-soft); border: 1px solid var(--border); transition: var(--transition-smooth);}
-        .card-header { font-size: 18px; color: var(--text-primary); font-weight: 700; margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border); padding-bottom: var(--space-sm); display: flex; justify-content: space-between;}
-        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-lg); }
-        .stat-box { background: var(--bg-main) !important; padding: var(--space-lg); text-align: center; border-radius: var(--radius-btn); font-size: 13px; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); transition: var(--transition-smooth);}
-        .stat-box:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: var(--shadow-soft); }
-        .stat-box .num { display: block; font-size: 28px; font-weight: 800; color: var(--text-primary) !important; margin-top: var(--space-xs); }
+        .header-title { font-size: 24px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xl); padding-bottom: var(--space-sm); border-bottom: 1px solid var(--border); }
 
-        label { font-weight: 600; font-size: 14px; color: var(--text-secondary); display: block; margin-top: var(--space-lg); margin-bottom: var(--space-sm); }
-        input, select { width: 100%; padding: 14px var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-input); box-sizing: border-box; font-size: 14px; font-weight: 500; background: var(--bg-main); color: var(--text-primary); transition: var(--transition-smooth); font-family: 'Cairo', sans-serif;}
-        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
-        button.btn { border: none; padding: 14px var(--space-lg); border-radius: var(--radius-btn); width: 100%; font-size: 16px; cursor: pointer; font-weight: 700; margin-top: var(--space-xl); color: white; display: flex; justify-content: center; align-items: center; gap: var(--space-sm); transition: var(--transition-smooth); font-family: 'Cairo', sans-serif;}
-        button.btn:active { transform: scale(0.98); } button.btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-info { background: var(--info); } .btn-warning { background: var(--warning); color: #fff; }
+        /* ================= 3. Card & UI Components ================= */
+        .card { background: var(--surface); padding: var(--space-lg); border-radius: var(--radius-card); margin-bottom: var(--space-lg); box-shadow: var(--shadow-soft); border: 1px solid var(--border); transition: var(--transition-smooth); }
+        .card:hover { border-color: rgba(59, 130, 246, 0.3); transform: translateY(-2px); box-shadow: 0 15px 35px -5px rgba(0,0,0,0.1); }
+        .card-header { font-size: 16px; font-weight: 700; margin-bottom: var(--space-md); border-bottom: 1px dashed var(--border); padding-bottom: var(--space-sm); color: var(--text-primary); }
+        
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md); }
+        
+        .stat-box { background: var(--bg-main); padding: var(--space-md); text-align: center; border-radius: var(--radius-md); font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); transition: var(--transition-smooth); }
+        .stat-box:hover { border-color: var(--primary); }
+        .stat-box .num { display: block; font-size: 28px; font-weight: 800; color: var(--text-primary); margin-top: 5px; }
 
-        .batch-card { background: var(--bg-main); border: 1px solid var(--border); padding: var(--space-lg); border-radius: var(--radius-btn); margin-bottom: var(--space-lg); border-right: 4px solid var(--border); transition: var(--transition-smooth);}
-        .batch-card:hover { border-color: var(--text-secondary); transform: translateX(-4px); box-shadow: var(--shadow-soft); }
-        .batch-card.stage-incubator { border-right-color: var(--info); } .batch-card.stage-hatcher { border-right-color: var(--primary); } .batch-card.stage-rearing { border-right-color: var(--warning); } .batch-card.stage-slaughter { border-right-color: var(--danger); } .batch-card.stage-completed { border-right-color: var(--success); }
-        .badge { padding: 4px var(--space-md); border-radius: 6px; font-size: 12px; font-weight: 700; color: white; display: inline-block; }
-        .batch-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }
-        .batch-actions button { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; transition: var(--transition-smooth); }
-        .batch-actions button:hover { background: var(--border); transform: translateY(-2px); }
+        label { font-weight: 600; font-size: 13px; color: var(--text-secondary); display: block; margin-top: 15px; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 14px; font-weight: 600; background: var(--bg-main); color: var(--text-primary); transition: var(--transition-smooth); font-family: inherit; box-sizing: border-box; }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+        
+        .btn { padding: 12px 20px; border-radius: var(--radius-md); font-weight: 700; cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: var(--transition-smooth); font-family: inherit; width: 100%; margin-top: 15px; font-size: 14px; }
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2); }
+        .btn-primary:hover { background: var(--primary-hover); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+        .btn-danger:hover { background: var(--danger); color: white; }
+        .btn-info { background: var(--info); color: white; }
 
-        .transaction-item { display: flex; justify-content: space-between; align-items: center; padding: var(--space-md) var(--space-lg); border-radius: 8px; border-bottom: 1px solid var(--border); transition: var(--transition-smooth); background: transparent; }
-        .transaction-item:hover { background: rgba(148, 163, 184, 0.05); padding-right: 24px; border-left: 3px solid var(--primary); }
-        .transaction-item:nth-child(even) { background: rgba(0,0,0,0.02); }
-        [data-theme="dark"] .transaction-item:nth-child(even) { background: rgba(0,0,0,0.15); }
-        .text-success { color: var(--success) !important; } .text-danger { color: var(--danger) !important; }
+        /* ================= 4. Batches & Tables ================= */
+        .batch-card { background: var(--bg-main); border: 1px solid var(--border); padding: 15px; border-radius: var(--radius-md); margin-bottom: 15px; border-right: 4px solid var(--border); transition: var(--transition-smooth); }
+        .batch-card:hover { border-color: var(--text-secondary); transform: translateX(-4px); }
+        .batch-card.stage-incubator { border-right-color: var(--info); } 
+        .batch-card.stage-hatcher { border-right-color: var(--primary); } 
+        .batch-card.stage-rearing { border-right-color: var(--warning); } 
+        .batch-card.stage-slaughter { border-right-color: var(--danger); }
+        .badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; color: white; }
+        
+        .transaction-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; border-bottom: 1px solid var(--border); transition: var(--transition-smooth); }
+        .transaction-item:hover { background: rgba(59, 130, 246, 0.05); padding-right: 20px; border-left: 3px solid var(--primary); }
 
-        .theme-toggle-btn { position: fixed; top: 20px; left: 20px; z-index: 2000; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-soft); transition: var(--transition-smooth); }
-        .theme-toggle-btn:hover { transform: scale(1.1); border-color: var(--primary); }
-
-        .fab-container { position: fixed; bottom: 85px; right: 20px; z-index: 2000; }
-        .fab { background: var(--primary); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: var(--shadow-soft); cursor: pointer; border: none; transition: var(--transition-smooth); }
-        .fab:active { transform: scale(0.9); } .fab:hover { transform: scale(1.05); }
-        .fab-menu { display: none; position: absolute; bottom: 70px; right: 0; background: var(--surface); border-radius: var(--radius-btn); box-shadow: 0 10px 25px rgba(0,0,0,0.15); width: 180px; padding: var(--space-sm); flex-direction: column; gap: var(--space-xs); border: 1px solid var(--border); }
-        [data-theme="dark"] .fab-menu { box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        /* ================= 5. Modals & FAB ================= */
+        .fab-container { position: fixed; bottom: 40px; right: 30px; z-index: 2000; }
+        .fab { background: var(--primary); color: white; width: 60px; height: 60px; border-radius: 50%; font-size: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3); border: none; cursor: pointer; transition: var(--transition-smooth); }
+        .fab:active { transform: scale(0.9); } .fab:hover { transform: scale(1.1); }
+        .fab-menu { display: none; position: absolute; bottom: 75px; right: 0; background: var(--surface); border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: 200px; padding: 8px; flex-direction: column; border: 1px solid var(--border); }
         .fab-menu.active { display: flex; animation: slideUp 0.2s ease-out; }
-        .fab-btn { background: transparent; color: var(--text-primary); padding: var(--space-md); border-radius: 8px; font-size: 14px; text-align: right; display: flex; align-items: center; gap: var(--space-sm); border: none; cursor: pointer; font-weight: 600; width: 100%; transition: var(--transition-smooth);}
-        .fab-btn:hover { background: var(--bg-main); padding-right: var(--space-lg); }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .fab-btn { background: transparent; color: var(--text-primary); padding: 12px; border-radius: 6px; font-size: 14px; font-weight: 600; text-align: right; display: flex; align-items: center; gap: 10px; border: none; cursor: pointer; width: 100%; transition: 0.2s; }
+        .fab-btn:hover { background: var(--bg-main); color: var(--primary); }
 
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 2500; justify-content: center; align-items: flex-end; }
-        @media (min-width: 768px) { .modal-overlay { align-items: center; } .modal-content { border-radius: 24px !important; } }
-        .modal-content { background: var(--surface); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: var(--space-xxl) var(--space-xl); box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.2);}
-        [data-theme="dark"] .modal-content { box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-        .close-modal { position: absolute; left: 20px; top: 20px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-secondary); width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition-smooth);}
-        .close-modal:hover { color: var(--text-primary); background: var(--border); transform: rotate(90deg); }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(5px); z-index: 2500; justify-content: center; align-items: center; }
+        .modal-content { background: var(--surface); width: 90%; max-width: 500px; border-radius: var(--radius-card); padding: var(--space-xl); position: relative; border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto; }
+        @media (max-width: 767px) { .modal-overlay { align-items: flex-end; } .modal-content { border-radius: 24px 24px 0 0; width: 100%; } }
+        .close-modal { position: absolute; left: 20px; top: 20px; background: var(--bg-main); border: none; color: var(--text-secondary); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; }
+        .close-modal:hover { background: var(--danger); color: white; transform: rotate(90deg); }
         
-        #toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: white; padding: 12px 24px; border-radius: 100px; z-index: 3000; font-weight: 600; font-size: 14px; text-align: center; box-shadow: var(--shadow-soft); }
-        .dates-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); font-size: 12px; margin-top: var(--space-sm); background: var(--bg-main); padding: var(--space-sm); border-radius: 8px; border: 1px solid var(--border);}
-        .result-stamp { padding: var(--space-lg); border-radius: var(--radius-btn); text-align: center; font-size: 18px; font-weight: 800; margin-top: var(--space-lg); border: 2px dashed;}
-        .freezer-log { background: var(--bg-main); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-right: 4px solid var(--info); font-size: 14px; transition: var(--transition-smooth);}
-        .freezer-log:hover { transform: translateX(-4px); background: rgba(148, 163, 184, 0.05);}
-        .freezer-tag-new { background: var(--success); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
-        .freezer-tag-old { background: var(--danger); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
-                /* ================= إصلاحات شاشة الموبايل (طوارئ) ================= */
-        @media (max-width: 767px) {
-            /* 1. رفع الزرار العائم (الصاعق) عشان مايستخباش تحت القائمة السفلية */
-            .fab-container { 
-                bottom: 110px !important; 
-                right: 15px !important; 
-            }
-            
-            /* 2. تظبيط زرار "إضافة دفعة" عشان ياخد عرض الشاشة ومايطلعش بره */
-            .header-title { 
-                flex-direction: column; 
-                align-items: flex-start; 
-                gap: 15px; 
-            }
-            .header-title div { 
-                width: 100%; 
-            }
-            .header-title button { 
-                width: 100%; 
-                padding: 12px !important; 
-                font-size: 16px !important; 
-                justify-content: center;
-            }
+        #toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: var(--text-primary); color: var(--bg-main); padding: 12px 24px; border-radius: 100px; z-index: 3000; font-weight: bold; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 
-            /* 3. تأكيد إن القائمة السفلية الزراير بتاعتها شغالة باللمس */
-            .nav-item { 
-                cursor: pointer; 
-                -webkit-tap-highlight-color: transparent; 
-            }
-        }
-
-                /* ================= ستايل مركز التحكم (Settings Layout) ================= */
-        .settings-layout {
-            display: flex;
-            gap: 24px;
-            height: calc(100vh - 120px);
-            background: var(--surface);
-            border-radius: 16px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-        .settings-sidebar {
-            width: 260px;
-            background: var(--bg-main);
-            border-left: 1px solid var(--border);
-            padding: 20px 0;
-            overflow-y: auto;
-        }
-        .settings-search {
-            margin: 0 16px 20px;
-            position: relative;
-        }
-        .settings-search input {
-            width: 100%; padding: 10px 35px 10px 10px;
-            border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
-        }
-        .settings-search i {
-            position: absolute; right: 12px; top: 12px; color: var(--text-secondary);
-        }
-        .settings-group-title {
-            font-size: 11px; font-weight: 800; color: var(--text-secondary);
-            text-transform: uppercase; letter-spacing: 1px;
-            margin: 16px 20px 8px;
-        }
-        .settings-nav-item {
-            padding: 10px 20px; color: var(--text-primary); font-size: 14px;
-            cursor: pointer; display: flex; align-items: center; gap: 10px;
-            transition: 0.2s; border-right: 3px solid transparent;
-        }
+        /* ================= 6. Settings Architecture ================= */
+        .settings-layout { display: flex; gap: 24px; height: calc(100vh - 120px); background: var(--surface); border-radius: var(--radius-card); border: 1px solid var(--border); overflow: hidden; }
+        .settings-sidebar { width: 260px; background: var(--bg-main); border-left: 1px solid var(--border); padding: 20px 0; overflow-y: auto; }
+        .settings-search { margin: 0 16px 20px; position: relative; }
+        .settings-search input { width: 100%; padding: 10px 35px 10px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+        .settings-search i { position: absolute; right: 12px; top: 12px; color: var(--text-secondary); }
+        .settings-group-title { font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; margin: 16px 20px 8px; }
+        .settings-nav-item { padding: 10px 20px; color: var(--text-primary); font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s; border-right: 3px solid transparent; }
         .settings-nav-item:hover { background: rgba(37, 99, 235, 0.05); color: var(--primary); }
-        .settings-nav-item.active {
-            background: rgba(37, 99, 235, 0.1); color: var(--primary);
-            border-right-color: var(--primary); font-weight: bold;
-        }
-        .settings-content-area {
-            flex: 1; padding: 32px; overflow-y: auto;
-        }
+        .settings-nav-item.active { background: rgba(37, 99, 235, 0.1); color: var(--primary); border-right-color: var(--primary); font-weight: bold; }
+        .settings-content-area { flex: 1; padding: 32px; overflow-y: auto; }
         .settings-tab { display: none; animation: fadeIn 0.3s ease-out; }
         .settings-tab.active { display: block; }
         .settings-desc { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
-        .settings-card {
-            background: var(--bg-main); border: 1px solid var(--border);
-            border-radius: 12px; padding: 20px; margin-bottom: 16px;
-        }
-        .setting-row {
-            display: flex; justify-content: space-between; align-items: center;
-        }
+        .settings-card { background: var(--bg-main); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; }
         .setting-row h4 { margin: 0 0 4px 0; font-size: 15px; }
         .setting-row span { font-size: 12px; color: var(--text-secondary); }
         .setting-divider { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+        
+        .theme-option { border: 2px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: 0.3s; background: var(--surface); }
+        .theme-option:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .theme-option.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary) inset; }
+        .color-circle { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; transition: 0.2s; border: 3px solid transparent; }
+        .color-circle:hover { transform: scale(1.15); }
+        .color-circle.active { border-color: var(--text-primary); transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
         
         @media (max-width: 767px) {
             .settings-layout { flex-direction: column; height: auto; }
@@ -218,49 +175,21 @@
             .setting-row { flex-direction: column; align-items: flex-start; gap: 12px; }
             .setting-row input, .setting-row select { width: 100% !important; }
         }
-        /* ================= ستايل قسم المظهر (Appearance) ================= */
-        .theme-option {
-            border: 2px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: var(--surface);
-        }
-        .theme-option:hover {
-            border-color: var(--primary);
-            background: rgba(37, 99, 235, 0.05);
-            transform: translateY(-2px);
-        }
-        .theme-option.active {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px var(--primary) inset;
-        }
-        .color-circle {
-            width: 45px;
-            height: 45px;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            border: 3px solid transparent;
-        }
-        .color-circle:hover {
-            transform: scale(1.15);
-        }
-        .color-circle.active {
-            border-color: var(--text-primary);
-            transform: scale(1.1);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        }
 
+        /* ================= 7. Operation Cockpit (Slaughter Mode) ================= */
+        .operation-cockpit { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #090d16; z-index: 9999; padding: var(--space-xl); display: flex; flex-direction: column; box-sizing: border-box; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .cockpit-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: var(--space-lg); color: #fff;}
+        .cockpit-badge { background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; }
+        .cockpit-body { flex: 1; padding: var(--space-xl) 0; overflow-y: auto; }
+        .cockpit-alert { background: rgba(59, 130, 246, 0.15); color: #38bdf8; padding: 15px; border-radius: var(--radius-md); font-weight: bold; text-align: center; margin-bottom: 20px; border: 1px solid rgba(56, 189, 248, 0.3);}
+        .cockpit-input-card { background: #1e293b; border: 2px solid #334155; border-radius: var(--radius-card); padding: 20px; text-align: center; transition: 0.2s; }
+        .cockpit-input-card:focus-within { border-color: #3b82f6; box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+        .cockpit-input-card input { width: 100%; border: none; background: #0f172a; color: #fff; font-size: 36px; font-weight: 900; text-align: center; margin-top: 15px; border-radius: 12px; padding: 15px 0; outline: none; font-family: monospace; }
+        .cockpit-footer { border-top: 1px solid #334155; padding-top: 20px; display: flex; justify-content: space-between; align-items: center; color: #fff; }
     </style>
 </head>
 <body>
 
-    <button class="theme-toggle-btn" onclick="toggleAppTheme()" title="تبديل وضع الألوان">
-        <i id="themeIcon" class="fas fa-moon"></i>
-    </button>
     <div id="toast"></div>
 
     <div class="fab-container">
@@ -276,7 +205,7 @@
         <div class="sidebar-logo"><i class="fas fa-kiwi-bird" style="color: var(--primary);"></i> سمان ههيا</div>
         <div class="nav-item active" onclick="switchPage('dashboard')"><i class="fas fa-chart-pie"></i><span>الرئيسية</span></div>
         <div class="nav-item" onclick="switchPage('incubator')"><i class="fas fa-temperature-half"></i><span>المفرخ</span></div>
-        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>عنابر التربية</span></div>
+        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-warehouse"></i><span>عنابر التربية</span></div>
         <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>المخزون (فريزر)</span></div>
         <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>الماليات P&L</span></div>
         <div style="flex: 1;"></div>
@@ -286,7 +215,7 @@
     <nav class="bottom-nav">
         <div class="nav-item active" onclick="switchPage('dashboard')"><i class="fas fa-chart-pie"></i><span>الرئيسية</span></div>
         <div class="nav-item" onclick="switchPage('incubator')"><i class="fas fa-temperature-half"></i><span>تفريخ</span></div>
-        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>تربية</span></div>
+        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-warehouse"></i><span>تربية</span></div>
         <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>فريزر</span></div>
         <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>حسابات</span></div>
         <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>إعدادات</span></div>
@@ -295,37 +224,104 @@
     <div class="main-content">
         
         <div id="dashboard" class="page-view active">
-            <div class="header-title"><span>لوحة القيادة</span><div><button onclick="openModal('modalBatch')" style="background:var(--primary);border:1px solid var(--primary-hover);color:white;font-size:14px; border-radius:8px; padding: 8px 16px; cursor:pointer; font-family:'Cairo'; font-weight:700;"><i class="fas fa-plus"></i> إضافة دفعة</button></div></div>
-            <div class="card"><div class="grid-2"><button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-clipboard-list"></i> علف/نافق</button><button class="btn btn-success" onclick="openModal('modalSale')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button></div></div>
+            <div class="header-title">
+                <span>لوحة القيادة</span>
+                <button class="btn btn-primary" style="width:auto; margin:0;" onclick="openModal('modalBatch')"><i class="fas fa-plus"></i> إضافة دفعة</button>
+            </div>
             
-                        <div class="card">                 <div class="card-header">ملخص المزرعة <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal;">(اضغط للتفاصيل)</span></div>                 <div class="grid-2">                     <div class="stat-box" style="cursor: pointer;" onclick="switchPage('incubator')">                         بالماكينة<span class="num" id="dashEggs">0</span>                     </div>                     <div class="stat-box" style="cursor: pointer;" onclick="switchPage('rearing')">                         بالعنابر<span class="num" id="dashChicks">0</span>                     </div>                     <div class="stat-box" style="border-color:var(--success); cursor: pointer;" onclick="switchPage('freezer')">                         بالفريزر<span class="num text-success" id="dashFreezer">0</span>                     </div>                     <div class="stat-box" style="border-color:var(--warning); cursor: pointer;" onclick="switchPage('finance')">                         مبيعات<span class="num text-warning" id="dashSales">0</span>                     </div>                 </div>             </div>
+            <div class="card">
+                <div class="grid-2">
+                    <button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin:0;"><i class="fas fa-clipboard-list"></i> استهلاك يومي</button>
+                    <button class="btn btn-success" onclick="openModal('modalSale')" style="margin:0;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">ملخص المزرعة <span style="font-size: 12px; color: var(--text-secondary); font-weight: normal;">(اضغط للتفاصيل)</span></div>
+                <div class="grid-2">
+                    <div class="stat-box" style="cursor: pointer;" onclick="switchPage('incubator')">بالماكينة<span class="num" id="dashEggs">0</span></div>
+                    <div class="stat-box" style="cursor: pointer;" onclick="switchPage('rearing')">بالعنابر<span class="num" id="dashChicks">0</span></div>
+                    <div class="stat-box" style="border-color:var(--success); cursor: pointer;" onclick="switchPage('freezer')">بالفريزر<span class="num text-success" id="dashFreezer">0</span></div>
+                    <div class="stat-box" style="border-color:var(--warning); cursor: pointer;" onclick="switchPage('finance')">مبيعات<span class="num text-warning" id="dashSales">0</span></div>
+                </div>
+            </div>
             
             <div class="card" style="border-right: 4px solid var(--warning);">
-                <div class="card-header" style="color:var(--warning);"><i class="fas fa-wheat-awn"></i> مخزن العلف العيني</div>
+                <div class="card-header" style="color:var(--warning); border-bottom-color: rgba(245, 158, 11, 0.2);"><i class="fas fa-wheat-awn"></i> مخزن العلف العيني</div>
                 <div style="text-align: center;">
                     <span style="font-size: 14px; color: var(--text-secondary);">الرصيد الحالي بالمخزن</span>
-                    <div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--text-primary);" id="feedStockDisplay">0 كجم</div>
+                    <div style="font-size: 40px; font-weight: 800; margin: 10px 0; color:var(--text-primary);" id="feedStockDisplay">0 كجم</div>
                 </div>
-                <button class="btn" style="background:transparent; border: 1px dashed var(--warning); color:var(--text-primary); margin-top:15px; font-size:14px;" onclick="openModal('modalBuyFeed')"><i class="fas fa-truck-loading"></i> توريد كمية جديدة للمخزن</button>
+                <button class="btn" style="background:transparent; border: 1px dashed var(--warning); color:var(--text-primary); margin-top:15px;" onclick="openModal('modalBuyFeed')"><i class="fas fa-truck-loading"></i> توريد كمية جديدة</button>
             </div>
 
-            <div class="card" style="border: 1px solid var(--danger);"><div class="card-header" style="color:var(--danger); border:none; margin:0; padding:0;"><i class="fas fa-exclamation-circle"></i> مهام وتنبيهات</div><div id="alertsContainer" style="margin-top: 15px; font-size: 14px; line-height: 1.6; color:var(--text-secondary);">جاري التحميل...</div></div>
+            <div class="card">
+                <div class="card-header" style="color:var(--primary);"><i class="fas fa-chart-area"></i> تحليل الأداء المالي</div>
+                <div id="chartContainer" style="width: 100%; height: 300px; direction: ltr;"></div>
+            </div>
+
+            <div class="card" style="border: 1px solid var(--danger);">
+                <div class="card-header" style="color:var(--danger); border:none; margin:0; padding:0;"><i class="fas fa-exclamation-circle"></i> تنبيهات النظام</div>
+                <div id="alertsContainer" style="margin-top: 15px; color:var(--text-secondary);">جاري التحميل...</div>
+            </div>
         </div>
 
-        <div id="incubator" class="page-view"><div class="header-title">إدارة التفريخ والمفقس</div><div id="incubatorList"></div></div>
-        <div id="rearing" class="page-view"><div class="header-title">عنابر التربية والذبح</div><div id="rearingList"></div><div class="card-header text-danger" style="margin-top:20px;">قيد الذبح والتجهيز</div><div id="slaughterList"></div></div>
-        <div id="freezer" class="page-view">     <div class="header-title">         <span>المخزون والفريزر</span>         <button class="btn btn-primary" onclick="openModal('modalAddCategory')" style="padding: 8px 16px;">+ صنف جديد</button>     </div>          <div class="card">         <div class="card-header">الأرصدة الحالية الشاملة</div>         <div class="grid-3" id="freezerGrid" style="margin-top: 15px;"></div>     </div>      <div class="card">         <div class="card-header">سجل الإيداعات ومتابعة التخزين</div>         <div id="freezerLogs"></div>     </div> </div>  <div id="modalAddCategory" class="modal-overlay">     <div class="modal-content">         <h3>إضافة صنف جديد للفريزر</h3>         <label>اسم الصنف (مثلاً: رويال، جامبو)</label>         <input type="text" id="newCatName" placeholder="اكتب اسم الصنف هنا">         <label>السعر (ج.م)</label>         <input type="number" id="newCatPrice" placeholder="سعر الجوز أو الكيلو">         <button class="btn btn-primary" onclick="addNewCategory()">حفظ الصنف الجديد</button>         <button class="btn" style="background:var(--danger); margin-top:10px;" onclick="closeModal('modalAddCategory')">إلغاء</button>     </div> </div>
+        <div id="incubator" class="page-view">
+            <div class="header-title">إدارة التفريخ والمفقس</div>
+            <div id="incubatorList"></div>
+        </div>
+        
+        <div id="rearing" class="page-view">
+            <div class="header-title">عنابر التربية والذبح</div>
+            <div id="rearingList"></div>
+            <div class="card-header text-danger" style="margin-top:30px;">قيد الذبح والتجهيز</div>
+            <div id="slaughterList"></div>
+        </div>
+        
+        <div id="freezer" class="page-view">
+            <div class="header-title">
+                <span>المخزون والفريزر</span>
+                <button class="btn btn-primary" style="width:auto; margin:0;" onclick="openModal('modalAddCategory')">+ صنف جديد</button>
+            </div>
+            <div class="card">
+                <div class="card-header">الأرصدة الحالية الشاملة</div>
+                <div class="grid-3" id="freezerGrid" style="margin-top: 15px;"></div>
+            </div>
+            <div class="card">
+                <div class="card-header">سجل الإيداعات ومتابعة التخزين</div>
+                <div id="freezerLogs"></div>
+            </div>
+        </div> 
 
         <div id="finance" class="page-view">
             <div class="header-title">الماليات والنتائج</div>
-            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
-            <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
-            <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
+            <div class="card" style="border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);">
+                <div style="text-align: center;">
+                    <span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span>
+                    <div style="font-size: 40px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div>
+                </div>
+                <div class="grid-2" style="margin-top: 15px; border-top: 1px dashed var(--border); padding-top: 15px;">
+                    <div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 20px;">0</strong></div>
+                    <div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 20px;">0</strong></div>
+                </div>
+                <button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">بيان ختامي للدفعة (P&L)</div>
+                <select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select>
+                <div id="batchReportContainer" style="margin-top: 15px; display: none;"></div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">سجل المعاملات</div>
+                <div id="ledgerList"></div>
+            </div>
         </div>
 
-                <div id="settingsPage" class="page-view">
+        <div id="settingsPage" class="page-view">
             <div class="header-title" style="margin-bottom: 20px;">
-                <span><i class="fas fa-sliders-h"></i> مركز التحكم الشامل (Settings)</span>
+                <span><i class="fas fa-sliders-h"></i> مركز التحكم الشامل</span>
             </div>
             
             <div class="settings-layout">
@@ -334,109 +330,61 @@
                         <i class="fas fa-search"></i>
                         <input type="text" placeholder="ابحث في الإعدادات...">
                     </div>
-                    
                     <div class="settings-group">
                         <div class="settings-group-title">الأساسيات</div>
                         <div class="settings-nav-item active" onclick="switchSettingsTab('general', this)"><i class="fas fa-globe"></i> General</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('appearance', this)"><i class="fas fa-paint-brush"></i> Appearance</div>
                         <div class="settings-nav-item" onclick="switchSettingsTab('farmOps', this)"><i class="fas fa-tractor"></i> Farm Operations</div>
                     </div>
-                    
                     <div class="settings-group">
                         <div class="settings-group-title">النظام والبيانات</div>
-                        <div class="settings-nav-item" onclick="switchSettingsTab('tables', this)"><i class="fas fa-table"></i> Tables & Data</div>
-                        <div class="settings-nav-item" onclick="switchSettingsTab('backup', this)"><i class="fas fa-cloud-download-alt"></i> Backup & Sync</div>
-                        <div class="settings-nav-item" onclick="switchSettingsTab('security', this)"><i class="fas fa-shield-alt"></i> Security</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('backup', this)"><i class="fas fa-cloud-download-alt"></i> Backup & Reset</div>
                     </div>
                 </div>
 
                 <div class="settings-content-area">
-                    
                     <div id="tab-general" class="settings-tab active">
                         <h2><i class="fas fa-globe"></i> General Settings</h2>
                         <p class="settings-desc">إعدادات الهوية العامة للسيستم والتوطين.</p>
-                        
                         <div class="settings-card">
-                            <div class="setting-row">
-                                <div>
-                                    <h4>اسم النظام (System Name)</h4>
-                                    <span>الاسم الذي يظهر في أعلى القائمة والفواتير</span>
-                                </div>
-                                <input type="text" value="Saman Hehia ERP" style="width: 200px;">
-                            </div>
+                            <div class="setting-row"><div><h4>اسم النظام (System Name)</h4><span>الاسم الذي يظهر في أعلى القائمة</span></div><input type="text" value="Saman Hehia ERP" style="width: 200px;"></div>
                             <hr class="setting-divider">
-                            <div class="setting-row">
-                                <div>
-                                    <h4>لغة النظام (Language)</h4>
-                                    <span>تغيير واجهة المستخدم (يتطلب إعادة تحميل)</span>
-                                </div>
-                                <select style="width: 200px;">
-                                    <option>العربية (Arabic)</option>
-                                    <option>English</option>
-                                </select>
-                            </div>
+                            <div class="setting-row"><div><h4>لغة النظام (Language)</h4><span>تغيير واجهة المستخدم</span></div><select style="width: 200px;"><option>العربية (Arabic)</option><option>English</option></select></div>
                         </div>
                     </div>
 
-                                        <div id="tab-appearance" class="settings-tab">
+                    <div id="tab-appearance" class="settings-tab">
                         <h2><i class="fas fa-paint-brush"></i> Appearance & Themes</h2>
                         <p class="settings-desc">تحكم في ألوان النظام والوضع الليلي لراحة عينيك.</p>
-                        
                         <div class="settings-card">
                             <h4 style="margin-bottom: 15px;">الوضع العام (System Theme)</h4>
-                            <div class="grid-2" style="gap: 15px;">
-                                <div class="theme-option" onclick="setThemeMode('light', this)">
-                                    <i class="fas fa-sun" style="font-size: 24px; margin-bottom: 10px; color: #f59e0b;"></i>
-                                    <div style="font-weight: bold;">الوضع الفاتح (Light)</div>
-                                </div>
-                                <div class="theme-option" onclick="setThemeMode('dark', this)">
-                                    <i class="fas fa-moon" style="font-size: 24px; margin-bottom: 10px; color: #3b82f6;"></i>
-                                    <div style="font-weight: bold;">الوضع الليلي (Dark)</div>
-                                </div>
+                            <div class="grid-2">
+                                <div class="theme-option" onclick="setThemeMode('light', this)"><i class="fas fa-sun" style="font-size: 24px; margin-bottom: 10px; color: #f59e0b;"></i><div style="font-weight: bold;">فاتح (Light)</div></div>
+                                <div class="theme-option" onclick="setThemeMode('dark', this)"><i class="fas fa-moon" style="font-size: 24px; margin-bottom: 10px; color: #3b82f6;"></i><div style="font-weight: bold;">ليلي (Dark)</div></div>
                             </div>
                         </div>
-
                         <div class="settings-card">
                             <h4 style="margin-bottom: 15px;">لون النظام الأساسي (Accent Color)</h4>
                             <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                                <div class="color-circle" style="background: #2563eb;" onclick="setPrimaryColor('#2563eb', this)" title="أزرق (افتراضي)"></div>
-                                <div class="color-circle" style="background: #10b981;" onclick="setPrimaryColor('#10b981', this)" title="أخضر طبي"></div>
-                                <div class="color-circle" style="background: #8b5cf6;" onclick="setPrimaryColor('#8b5cf6', this)" title="بنفسجي"></div>
-                                <div class="color-circle" style="background: #f43f5e;" onclick="setPrimaryColor('#f43f5e', this)" title="أحمر وردي"></div>
-                                <div class="color-circle" style="background: #f59e0b;" onclick="setPrimaryColor('#f59e0b', this)" title="عنبري"></div>
-                                <div class="color-circle" style="background: #0f172a;" onclick="setPrimaryColor('#0f172a', this)" title="كحلي داكن"></div>
+                                <div class="color-circle" style="background: #2563eb;" onclick="setPrimaryColor('#2563eb', this)"></div>
+                                <div class="color-circle" style="background: #10b981;" onclick="setPrimaryColor('#10b981', this)"></div>
+                                <div class="color-circle" style="background: #8b5cf6;" onclick="setPrimaryColor('#8b5cf6', this)"></div>
+                                <div class="color-circle" style="background: #f43f5e;" onclick="setPrimaryColor('#f43f5e', this)"></div>
+                                <div class="color-circle" style="background: #f59e0b;" onclick="setPrimaryColor('#f59e0b', this)"></div>
+                                <div class="color-circle" style="background: #0f172a;" onclick="setPrimaryColor('#0f172a', this)"></div>
                             </div>
                         </div>
                     </div>
 
-
                     <div id="tab-farmOps" class="settings-tab">
                         <h2><i class="fas fa-tractor"></i> Farm Operations</h2>
-                        <p class="settings-desc">تسعير الإنتاج، أنواع الطيور، وتكاليف العلف التشغيلية.</p>
-                        
+                        <p class="settings-desc">أسعار الطيور، البيض، وتكلفة العلف للحسابات الختامية.</p>
                         <div class="settings-card">
-                            <div class="setting-row">
-                                <div>
-                                    <h4>نوع الطائر الافتراضي</h4>
-                                    <span>الطائر الذي يظهر كخيار أول عند إضافة دفعة</span>
-                                </div>
-                                <select id="setBirdType" style="width: 200px;">
-                                    <option value="quail">سمان</option>
-                                    <option value="chicken">فراخ بيضاء</option>
-                                    <option value="turkey">رومي</option>
-                                </select>
-                            </div>
+                            <div class="setting-row"><div><h4>نوع الطائر الافتراضي</h4><span>لتسهيل إدخال الدفعات</span></div><select id="setBirdType" style="width: 200px;"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select></div>
                             <hr class="setting-divider">
-                            <div class="setting-row">
-                                <div>
-                                    <h4>سعر كيلو العلف (ج.م)</h4>
-                                    <span>يُستخدم في حساب التكلفة اليومية للقطيع</span>
-                                </div>
-                                <input type="number" id="setFeed" value="30" style="width: 150px;">
-                            </div>
+                            <div class="setting-row"><div><h4>سعر كيلو العلف (ج.م)</h4><span>لحساب FCR والتكلفة</span></div><input type="number" id="setFeed" value="30" style="width: 150px;"></div>
                         </div>
-
-                        <div class="settings-card" style="margin-top: 20px;">
+                        <div class="settings-card">
                             <h4 style="margin-bottom: 15px; color: var(--primary);">💰 تسعير كتاكيت وبيض المفرخ</h4>
                             <div class="grid-2">
                                 <div><label>كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
@@ -445,133 +393,69 @@
                                 <div><label>بيضة الرومي</label><input type="number" id="setTurkeyEgg" value="10"></div>
                             </div>
                         </div>
-                        
-                        <div style="margin-top: 20px; text-align: left;">
-                            <button class="btn btn-primary" onclick="saveSettings()">حفظ إعدادات التشغيل 💾</button>
-                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()" style="width:auto;">حفظ الإعدادات 💾</button>
                     </div>
 
                     <div id="tab-backup" class="settings-tab">
                         <h2><i class="fas fa-cloud-download-alt"></i> Backup & Reset</h2>
-                        <p class="settings-desc">أمان بياناتك ونسخها الاحتياطي.</p>
-                        
                         <div class="settings-card" style="border: 1px solid var(--danger);">
                             <div class="setting-row">
-                                <div>
-                                    <h4 style="color: var(--danger);">تصفير النظام بالكامل (Factory Reset)</h4>
-                                    <span style="color: var(--text-secondary);">سيتم مسح جميع الدفعات والمخازن والخزنة للأبد.</span>
-                                </div>
-                                <button class="btn btn-danger" onclick="resetSystem()">تأكيد التصفير ⚠️</button>
+                                <div><h4 style="color: var(--danger);">تصفير النظام بالكامل</h4><span style="color: var(--text-secondary);">مسح نهائي لكل الدفعات والخزنة!</span></div>
+                                <button class="btn btn-danger" onclick="resetSystem()" style="width:auto; margin:0;">تأكيد التصفير ⚠️</button>
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
 
-            
-            <div class="card">
-                <div class="card-header">أسعار التشغيل والبيع</div>
-                <label>سعر كيلو العلف للاستهلاك (ج.م)</label><input type="number" id="setFeed" value="30">
-                <label>سعر جوز الرويال (ج.م)</label><input type="number" id="setRoyal" value="120">
-                <label>سعر جوز سوبر سبشيال (ج.م)</label><input type="number" id="setSuperSpecial" value="110">
-                <label>سعر جوز سبشيال (ج.م)</label><input type="number" id="setSpecial" value="100">
-                <label>سعر جوز جامبو (ج.م)</label><input type="number" id="setJumbo" value="90">
-                <label>سعر جوز سوبر (ج.م)</label><input type="number" id="setSuper" value="80">
-                
-                <hr style="border:1px dashed var(--border); margin: 20px 0;">
-                
-                <label style="color: var(--primary);">💰 تسعير الإنتاج (للحسابات الختامية والمفرخ)</label>
-                <div class="grid-2">
-                    <div><label>سعر كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
-                    <div><label>سعر كتكوت الفراخ</label><input type="number" id="setChickenChick" value="25"></div>
-                    <div><label>سعر كتكوت الرومي</label><input type="number" id="setTurkeyChick" value="60"></div>
-                    <div><label>سعر بيضة الرومي (للبيع)</label><input type="number" id="setTurkeyEgg" value="10"></div>
-                </div>
+    </div>
 
-                <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات 💾</button>
+    <div id="modalBatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--primary);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم الدفعة</label><input type="text" id="bName"><label>البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول</label><input type="datetime-local" id="bDate"><button class="btn btn-primary" onclick="saveNewBatch()">بدء الدورة</button></div></div>
+    
+    <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 استهلاك يومي</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
+    
+    <div id="modalSale" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3><label>الصنف</label><select id="sGrade" onchange="calculateSaleTotal()"><option value="royal">رويال</option><option value="super_special">سوبر سبشيال</option><option value="special">سبشيال</option><option value="jumbo">جامبو</option><option value="super">سوبر</option><option value="bad">كسر / فرز</option></select><label>العدد (جوز)</label><input type="number" id="sQty" oninput="calculateSaleTotal()"><div style="background:var(--bg-main); padding:15px; border-radius:8px; border:1px dashed var(--border); margin-top:15px; text-align:center;"><span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span><div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div></div><button class="btn btn-success" onclick="processSale()">تأكيد البيع</button></div></div>
+    
+    <div id="modalExpense" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف نقدي</h3><label>المبلغ المدفوع (ج.م)</label><input type="number" id="eAmount"><label>بند الصرف</label><input type="text" id="eType"><label>تحميل على الدفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div></div>
+    
+    <div id="modalBuyFeed" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBuyFeed')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">🌾 توريد علف للمخزن</h3><label>الكمية المشتراة (كجم)</label><input type="number" id="bfQty"><label>إجمالي التكلفة (ج.م)</label><input type="number" id="bfTotalCost"><button class="btn btn-warning" onclick="buyFeed()">تأكيد وخصم النقدية</button></div></div>
+    
+    <div id="modalHatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalHatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--primary);">🐣 إتمام الفقس</h3><input type="hidden" id="hatchBatchId"><label>كتاكيت سليمة</label><input type="number" id="hHealthy" style="font-size: 24px; color: var(--success);"><label style="margin-top: 15px;">نظام التربية</label><select id="hRearingSystem"><option value="floor">أرضي (نشارة)</option><option value="battery">بطاريات (أقفاص)</option></select><div class="grid-2" style="margin-top: 15px;"><div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div><div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div></div><button class="btn btn-primary" onclick="moveToRearing()">نقل للتربية</button></div></div>
+    
+    <div id="modalDailyGuide" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDailyGuide')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--primary);"><i class="fas fa-clipboard-check"></i> قائمة مهام العامل اليومية</h3><div id="dailyGuideContent" style="margin-top: 15px;"></div><button class="btn btn-primary" onclick="closeModal('modalDailyGuide')">حسناً، تم التنفيذ 👍</button></div></div>
+
+    <div id="modalAddCategory" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalAddCategory')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0;">إضافة صنف للفريزر</h3><label>اسم الصنف</label><input type="text" id="newCatName" placeholder="مثلاً: رويال، جامبو"><label>السعر (ج.م)</label><input type="number" id="newCatPrice"><button class="btn btn-primary" onclick="addNewCategory()">حفظ الصنف</button></div></div>
+
+    <div id="slaughterCockpit" class="operation-cockpit" style="display: none;">
+        <div class="cockpit-header">
+            <div>
+                <span class="cockpit-badge">🔒 وضع التشغيل النشط (Slaughter Mode)</span>
+                <h1 id="cockpitBatchName" style="margin: 5px 0 0 0; font-size: 24px; font-weight: 800;">دفعة: -</h1>
             </div>
-            
-            <div class="card" style="border: 1px solid var(--danger);">
-                <div class="card-header" style="color:var(--danger);">منطقة الخطر ⚠️</div>
-                <button class="btn btn-danger" onclick="resetSystem()">تصفير كل بيانات النظام 🔄</button>
-            </div>
+            <button class="btn btn-danger" style="width: auto; margin: 0;" onclick="closeSlaughterCockpit()"><i class="fas fa-times"></i> إغلاق ↩️</button>
         </div>
-
-
-    <div id="modalBatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم الدفعة</label><input type="text" id="bName"><label>البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول</label><input type="datetime-local" id="bDate"><button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button></div></div>
-    
-    <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
-    
-    <div id="modalSale" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3><label>الصنف</label><select id="sGrade" onchange="calculateSaleTotal()"><option value="royal">رويال</option><option value="super_special">سوبر سبشيال</option><option value="special">سبشيال</option><option value="jumbo">جامبو</option><option value="super">سوبر</option><option value="bad">كسر / فرز</option></select><label>العدد (جوز)</label><input type="number" id="sQty" oninput="calculateSaleTotal()"><div style="background:var(--bg-main); padding:15px; border-radius:10px; border:1px solid var(--border); margin-top:15px; text-align:center;"><span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span><div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div></div><button class="btn btn-success" onclick="processSale()">تأكيد البيع</button></div></div>
-    
-    <div id="modalExpense" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف نقدي</h3><label>المبلغ المدفوع (ج.م)</label><input type="number" id="eAmount"><label>بند الصرف (إيجار، عمالة...)</label><input type="text" id="eType"><label>تحميل على الدفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div></div>
-    
-    <div id="modalBuyFeed" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBuyFeed')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">🌾 توريد علف للمخزن</h3><label>الكمية المشتراة (بالكيلو)</label><input type="number" id="bfQty" placeholder="مثال: 500"><label>إجمالي التكلفة المدفوعة (ج.م)</label><input type="number" id="bfTotalCost" placeholder="الفلوس اللي هتنقص من خزنتك"><button class="btn btn-warning" onclick="buyFeed()">تأكيد التوريد وخصم النقدية</button></div></div>
-    <div id="modalHatch" class="modal-overlay">
-        <div class="modal-content">
-            <button class="close-modal" onclick="closeModal('modalHatch')"><i class="fas fa-times"></i></button>
-            <h3 style="margin-top: 0; color: var(--primary);">🐣 إتمام الفقس ونقل للتربية</h3>
-            <input type="hidden" id="hatchBatchId">
-            <label>كتاكيت سليمة للتربية</label>
-            <input type="number" id="hHealthy" style="font-size: 24px; color: var(--success);">
-            
-            <label style="color: var(--info); margin-top: 15px;">نظام التربية (لحساب المساحة)</label>
-            <select id="hRearingSystem">
-                <option value="floor">تربية أرضية (نشارة)</option>
-                <option value="battery">تربية بطاريات (أقفاص)</option>
-            </select>
-
-            <div class="grid-2" style="margin-top: 15px;">
-                <div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div>
-                <div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div>
-            </div>
-            <button class="btn btn-primary" onclick="moveToRearing()">حساب ونقل للتربية</button>
+        <div class="cockpit-body">
+            <div class="cockpit-alert">💡 نصيحة: استخدم زر (Enter) في الكيبورد للانتقال السريع للصنف التالي.</div>
+            <div class="grid-3" id="cockpitInputsGrid" style="gap: 20px;"></div>
+        </div>
+        <div class="cockpit-footer">
+            <div style="font-size: 16px; font-weight: bold;">إجمالي المصنف: <span id="cockpitTotalDisplay" style="color: var(--success); font-size: 24px; margin: 0 10px;">0</span> طائر</div>
+            <button class="btn btn-success" style="width: auto; margin: 0; padding: 12px 30px; font-size: 16px;" onclick="submitSlaughterCockpit()">ترحيل المخزون ❄️</button>
         </div>
     </div>
 
-     <div id="modalClassify" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button></div></div>
-
-    <script>
-        function updateIcon() {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const icon = document.getElementById('themeIcon');
-            if (currentTheme === 'dark') { icon.className = 'fas fa-sun'; icon.style.color = '#f59e0b'; } else { icon.className = 'fas fa-moon'; icon.style.color = '#0f172a'; }
-        }
-        function toggleAppTheme() {
-            const root = document.documentElement;
-            const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', newTheme);
-            localStorage.setItem('saman_theme', newTheme);
-            updateIcon();
-        }
-        window.addEventListener('DOMContentLoaded', updateIcon);
-    </script>
-    <script type="module" src="./js/app.js"></script>
-    <div id="modalDailyGuide" class="modal-overlay">
-        <div class="modal-content">
-            <button class="close-modal" onclick="closeModal('modalDailyGuide')"><i class="fas fa-times"></i></button>
-            <h3 style="margin-top: 0; color: var(--primary);"><i class="fas fa-clipboard-check"></i> قائمة مهام العامل اليومية</h3>
-            <div id="dailyGuideContent" style="margin-top: 15px;">
-                </div>
-            <button class="btn btn-primary" style="margin-top: 20px;" onclick="closeModal('modalDailyGuide')">حسناً، تم التنفيذ 👍</button>
-        </div>
-    </div>
-    <div id="commandPalette" class="modal-overlay" style="align-items: flex-start; padding-top: 10vh;">
-        <div class="modal-content" style="max-width: 600px; width: 90%; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); padding: 0; overflow: hidden;">
-            
-            <div style="padding: 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-search" style="color: var(--text-secondary);"></i>
-                <input type="text" id="cmdInput" placeholder="اكتب أمراً أو ابحث عن صفحة... (مثال: إضافة دفعة)" style="border: none; background: transparent; width: 100%; font-size: 16px; outline: none; color: var(--text-primary); font-family: 'Cairo';">
+    <div id="commandPalette" class="modal-overlay" style="align-items: flex-start; padding-top: 15vh; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="max-width: 600px; width: 90%; background: var(--surface); padding: 0; overflow: hidden;">
+            <div style="padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-terminal" style="color: var(--primary);"></i>
+                <input type="text" id="cmdInput" placeholder="اكتب أمراً.. (مثال: إضافة دفعة، فريزر)" style="border: none; background: transparent; width: 100%; font-size: 18px; outline: none; color: var(--text-primary);">
                 <span style="font-size: 11px; background: var(--bg-main); padding: 4px 8px; border-radius: 4px; color: var(--text-secondary); border: 1px solid var(--border);">ESC</span>
             </div>
-            
-            <div id="cmdResults" style="max-height: 350px; overflow-y: auto; padding: 10px;">
-                </div>
-
+            <div id="cmdResults" style="max-height: 350px; overflow-y: auto; padding: 10px;"></div>
         </div>
     </div>
 
+    <script type="module" src="./js/app.js"></script>
 </body>
 </html>
