@@ -323,7 +323,7 @@
             <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
         </div>
 
-                <div id="settingsPage" class="page-view">
+        <div id="settingsPage" class="page-view">
             <div class="header-title" style="margin-bottom: 20px;">
                 <span><i class="fas fa-sliders-h"></i> مركز التحكم الشامل (Settings)</span>
             </div>
@@ -378,7 +378,7 @@
                         </div>
                     </div>
 
-                                        <div id="tab-appearance" class="settings-tab">
+                    <div id="tab-appearance" class="settings-tab">
                         <h2><i class="fas fa-paint-brush"></i> Appearance & Themes</h2>
                         <p class="settings-desc">تحكم في ألوان النظام والوضع الليلي لراحة عينيك.</p>
                         
@@ -469,35 +469,7 @@
                 </div>
             </div>
         </div>
-
-            
-            <div class="card">
-                <div class="card-header">أسعار التشغيل والبيع</div>
-                <label>سعر كيلو العلف للاستهلاك (ج.م)</label><input type="number" id="setFeed" value="30">
-                <label>سعر جوز الرويال (ج.م)</label><input type="number" id="setRoyal" value="120">
-                <label>سعر جوز سوبر سبشيال (ج.م)</label><input type="number" id="setSuperSpecial" value="110">
-                <label>سعر جوز سبشيال (ج.م)</label><input type="number" id="setSpecial" value="100">
-                <label>سعر جوز جامبو (ج.م)</label><input type="number" id="setJumbo" value="90">
-                <label>سعر جوز سوبر (ج.م)</label><input type="number" id="setSuper" value="80">
-                
-                <hr style="border:1px dashed var(--border); margin: 20px 0;">
-                
-                <label style="color: var(--primary);">💰 تسعير الإنتاج (للحسابات الختامية والمفرخ)</label>
-                <div class="grid-2">
-                    <div><label>سعر كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
-                    <div><label>سعر كتكوت الفراخ</label><input type="number" id="setChickenChick" value="25"></div>
-                    <div><label>سعر كتكوت الرومي</label><input type="number" id="setTurkeyChick" value="60"></div>
-                    <div><label>سعر بيضة الرومي (للبيع)</label><input type="number" id="setTurkeyEgg" value="10"></div>
-                </div>
-
-                <button class="btn btn-primary" onclick="saveSettings()">حفظ الإعدادات 💾</button>
-            </div>
-            
-            <div class="card" style="border: 1px solid var(--danger);">
-                <div class="card-header" style="color:var(--danger);">منطقة الخطر ⚠️</div>
-                <button class="btn btn-danger" onclick="resetSystem()">تصفير كل بيانات النظام 🔄</button>
-            </div>
-        </div>
+    </div>
 
 
     <div id="modalBatch" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3><label>نوع الطائر</label><select id="bBirdType"><option value="quail">سمان</option><option value="chicken">فراخ بيضاء</option><option value="turkey">رومي</option></select><label>اسم الدفعة</label><input type="text" id="bName"><label>البيض الكلي</label><input type="number" id="bEggs"><label>تاريخ الدخول</label><input type="datetime-local" id="bDate"><button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button></div></div>
@@ -531,7 +503,22 @@
         </div>
     </div>
 
-     <div id="modalClassify" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button></div></div>
+    <div id="modalEditBatch" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalEditBatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
+            <input type="hidden" id="editBatchId">
+            <label>اسم الدفعة</label>
+            <input type="text" id="editBName">
+            <label>البيض الكلي</label>
+            <input type="number" id="editBEggs">
+            <label>تاريخ الدخول الصحيح</label>
+            <input type="datetime-local" id="editBDate">
+            <button class="btn btn-info" onclick="saveEditBatch()">تحديث البيانات والتواريخ</button>
+        </div>
+    </div>
+
+    <div id="modalClassify" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button></div></div>
 
     <script>
         function updateIcon() {
