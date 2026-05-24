@@ -266,9 +266,9 @@ window.renderManageCategories = () => {
     }
 };
 
-window.addFreezerCategory = async () => {
-    const nameInput = document.getElementById('newCatName');
-    const priceInput = document.getElementById('newCatPrice');
+window.addCategoryFromMaster = async () => {
+    const nameInput = document.getElementById('masterCatName');
+    const priceInput = document.getElementById('masterCatPrice');
     const name = nameInput.value.trim();
     const price = priceInput.value || 0;
     
@@ -280,7 +280,9 @@ window.addFreezerCategory = async () => {
 
     nameInput.value = ''; priceInput.value = '';
     showToast("تمت إضافة الصنف للفريزر بنجاح!");
+    closeModal('modalManageFreezer');
 };
+
 
 window.deleteFreezerCategory = async (id) => {
     if(confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟ \nسيختفي من جميع القوائم والفريزر.")) {
