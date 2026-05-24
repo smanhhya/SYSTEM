@@ -183,21 +183,12 @@ window.saveSettings = async () => {
 };
 
 // ================= 4. الفريزر الديناميكي وتحكم الأصناف الموحد =================
-onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
-    if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
-        const defaultCats = {
-            'royal': { name: 'رويال', price: 120 },
-            'jumbo': { name: 'جامبو', price: 90 },
-            'super': { name: 'سوبر', price: 80 }
-        };
-        await set(ref(db, "inventory/freezerConfig"), defaultCats);
-        await set(ref(db, "inventory/freezerStock"), { 'royal':0, 'jumbo':0, 'super':0 });
-        return; 
-    }
 
-    dynamicFreezerConfig = snapshot.val();
+// 1. قراءة الأصناف ورسم الفريزر
+onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
+    dynamicFreezerConfig = snapshot.exists() ? snapshot.val() : {};
     
-    // تحديث قائمة المبيعات
+    // تحديث قائمة البيع
     const saleSelect = document.getElementById('sGrade');
     if(saleSelect) {
         saleSelect.innerHTML = '<option value="">-- اختر الصنف للبيع --</option>';
@@ -206,10 +197,9 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
         });
     }
 
-    // تحديث نافذة الإدارة الجديدة (إذا كانت مفتوحة)
-    renderManageCategories();
+    // تحديث نافذة الإدارة أوتوماتيك لو مفتوحة
+    if(typeof window.renderManageCategories === 'function') window.renderManageCategories();
 
-    // رندر كروت الفريزر
     get(ref(db, "inventory/freezerStock")).then(stockSnap => {
         const stock = stockSnap.exists() ? stockSnap.val() : {};
         const grid = document.getElementById('freezerGrid');
@@ -218,6 +208,10 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
         
         grid.innerHTML = ''; let totalCount = 0;
         
+        if(Object.keys(dynamicFreezerConfig).length === 0) {
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف لإضافة رويال وجامبو وغيرها.</div>`;
+        }
+
         Object.keys(dynamicFreezerConfig).forEach(id => {
             const item = dynamicFreezerConfig[id];
             const qty = stock[id] || 0;
@@ -236,12 +230,24 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
     });
 });
 
-// دوال إدارة الفريزر الإضافية (إضافة وحذف الأصناف بالكامل)
-window.openManageFreezer = () => {
-    openModal('modalManageFreezer');
-    renderManageCategories();
+// 2. تعديل الكارت (متأمنة ضد الحذف الخطأ)
+window.editFreezerItem = (id, currentStock, currentPrice, name) => {
+    const newQtyStr = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
+    if(newQtyStr === null) return; // لو داس إلغاء
+    
+    const newPriceStr = prompt(`تعديل سعر صنف (${name}) بالجنيه:`, currentPrice);
+    if(newPriceStr === null) return; 
+
+    // لو مسح الرقم خالص بيعتبره صفر عشان ميهنجش
+    const newQty = parseInt(newQtyStr) || 0;
+    const newPrice = parseFloat(newPriceStr) || 0;
+
+    update(ref(db, `inventory/freezerStock`), { [id]: newQty });
+    update(ref(db, `inventory/freezerConfig/${id}`), { price: newPrice });
+    showToast("تم التعديل بنجاح 👍");
 };
 
+// 3. إدارة الأصناف (إضافة وحذف)
 window.renderManageCategories = () => {
     const container = document.getElementById('freezerCategoriesList');
     if(!container) return;
@@ -253,14 +259,12 @@ window.renderManageCategories = () => {
 
     for (const [id, cat] of Object.entries(dynamicFreezerConfig)) {
         container.innerHTML += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ddd; background: #fff; margin-bottom: 5px; border-radius: 5px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); background: var(--surface); margin-bottom: 5px; border-radius: 5px;">
                 <div>
-                    <strong style="font-size: 16px;">${cat.name}</strong> 
+                    <strong style="font-size: 16px; color: var(--text-primary);">${cat.name}</strong> 
                     <span style="color: var(--success); font-size: 14px;">(السعر: ${cat.price})</span>
                 </div>
-                <div>
-                    <button class="btn btn-danger" onclick="deleteFreezerCategory('${id}')" style="padding: 5px 10px; font-size: 12px; margin:0;">🗑️ حذف</button>
-                </div>
+                <button class="btn btn-danger" onclick="deleteFreezerCategory('${id}')" style="padding: 5px 10px; font-size: 12px; margin:0; width:auto;">🗑️ حذف</button>
             </div>
         `;
     }
@@ -269,6 +273,8 @@ window.renderManageCategories = () => {
 window.addCategoryFromMaster = async () => {
     const nameInput = document.getElementById('masterCatName');
     const priceInput = document.getElementById('masterCatPrice');
+    if(!nameInput || !priceInput) return;
+
     const name = nameInput.value.trim();
     const price = priceInput.value || 0;
     
@@ -279,40 +285,61 @@ window.addCategoryFromMaster = async () => {
     await set(ref(db, `inventory/freezerStock/${newId}`), 0);
 
     nameInput.value = ''; priceInput.value = '';
-    showToast("تمت إضافة الصنف للفريزر بنجاح!");
-    closeModal('modalManageFreezer');
+    showToast("تمت إضافة الصنف بنجاح!");
 };
 
-
 window.deleteFreezerCategory = async (id) => {
-    if(confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟ \nسيختفي من جميع القوائم والفريزر.")) {
+    if(confirm("هل أنت متأكد من حذف هذا الصنف؟ \nسيختفي من القوائم.")) {
         await remove(ref(db, `inventory/freezerConfig/${id}`));
         await remove(ref(db, `inventory/freezerStock/${id}`));
         showToast("تم الحذف بنجاح");
     }
 };
 
-window.editFreezerItem = (id, currentStock, currentPrice, name) => {
-    const newQty = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
-    if(newQty === null) return; 
-    
-    const newPrice = prompt(`تعديل سعر صنف (${name}) بالجنيه:`, currentPrice);
-    if(newPrice !== null) {
-        update(ref(db, `inventory/freezerStock`), { [id]: parseInt(newQty) || 0 });
-        update(ref(db, `inventory/freezerConfig/${id}`), { price: parseFloat(newPrice) || 0 });
-        showToast("تم تحديث الرصيد والسعر بنجاح 👍");
+// 4. إدارة سجل التخزين والحذف
+let isDeleteLogMode = false;
+window.toggleLogDeletion = () => {
+    isDeleteLogMode = !isDeleteLogMode;
+    if(typeof window.renderFreezerLogs === 'function') window.renderFreezerLogs(); 
+};
+
+window.deleteFreezerLog = async (logId) => {
+    if(confirm("هل أنت متأكد من حذف هذا السجل؟ (هذا الإجراء لا يعدل الرصيد، يحذف السجل فقط)")) {
+        await remove(ref(db, `inventory/freezerLogs/${logId}`));
+        showToast("تم حذف السجل");
     }
 };
 
 onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
+    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; 
+    window.renderFreezerLogs();
+});
+
+window.renderFreezerLogs = () => {
+    const el = document.getElementById('freezerLogs');
+    if(!el) return;
+    let html = ''; const now = new Date();
+    
     Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
         const log = allFreezerLogs[key]; const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
+        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:10px;">جديد</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`;
         let itemsStr = Object.keys(log.items).filter(k => log.items[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${log.items[k]}`).join(' | ');
-        html += `<div class="freezer-log"><div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong>${log.batchName}</strong></div><div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div><div style="font-weight:bold; color:var(--primary);">${itemsStr}</div></div>`;
+        
+        let delBtn = isDeleteLogMode ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 10px; width:auto; margin:0;" onclick="deleteFreezerLog('${key}')">حذف</button>` : '';
+
+        html += `<div class="freezer-log" style="background:var(--bg-main); padding:12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--info);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;">
+                <div><strong>${log.batchName}</strong> ${ageTag}</div>
+                ${delBtn}
+            </div>
+            <div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div>
+            <div style="font-weight:bold; color:var(--primary); font-size:13px;">${itemsStr}</div>
+        </div>`;
     });
-    const el = document.getElementById('freezerLogs'); if(el) el.innerHTML = html || '<div style="text-align:center;">لا توجد سجلات</div>';
-});
+    
+    el.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
+};
+
 
 // ================= 5. الدفعات والذبح الديناميكي =================
 window.saveNewBatch = async () => {
