@@ -244,21 +244,24 @@
         <div id="freezer" class="page-view">
             <div class="header-title">
                 <span>المخزون والفريزر</span>
-                <button class="btn btn-primary" onclick="openModal('modalAddCategory')" style="padding: 8px 16px;">+ صنف جديد</button>
+                <button class="btn btn-primary" onclick="openModal('modalManageFreezer')" style="padding: 8px 16px;">
+                    <i class="fas fa-cog"></i> صنف جديد / إدارة الأصناف
+                </button>
             </div>          
             <div class="card">
                 <div class="card-header">الأرصدة الحالية الشاملة</div>
                 <div class="grid-3" id="freezerGrid" style="margin-top: 15px;"></div>
             </div>      
             <div class="card">
-                <div class="card-header">سجل الإيداعات ومتابعة التخزين</div>
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    سجل الإيداعات ومتابعة التخزين
+                    <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="toggleLogDeletion()">
+                        <i class="fas fa-trash-alt"></i> إدارة الحذف
+                    </button>
+                </div>
                 <div id="freezerLogs"></div>
             </div>
         </div>  
-        <button class="btn btn-primary" onclick="openManageFreezer()" style="margin-bottom: 15px;">
-    ⚙️ إدارة أصناف الفريزر
-</button>
-
 
         <div id="finance" class="page-view">
             <div class="header-title">الماليات والنتائج</div>
@@ -412,16 +415,6 @@
                 </div>
             </div>
         </div>
-    </div> <div id="modalAddCategory" class="modal-overlay">
-        <div class="modal-content">
-            <button class="close-modal" onclick="closeModal('modalAddCategory')"><i class="fas fa-times"></i></button>
-            <h3 style="margin-top: 0; color: var(--primary);">إضافة صنف جديد للفريزر</h3>
-            <label>اسم الصنف (مثلاً: رويال، جامبو)</label>
-            <input type="text" id="newCatName" placeholder="اكتب اسم الصنف هنا">
-            <label>السعر (ج.م)</label>
-            <input type="number" id="newCatPrice" placeholder="سعر الجوز أو الكيلو">
-            <button class="btn btn-primary" onclick="addNewCategory()">حفظ الصنف الجديد</button>
-        </div>
     </div>
 
     <div id="modalBatch" class="modal-overlay">
@@ -459,30 +452,31 @@
             <button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button>
         </div>
     </div>
+    
     <div id="modalEditBatch" class="modal-overlay">
-    <div class="modal-content">
-        <button class="close-modal" onclick="closeModal('modalEditBatch')"><i class="fas fa-times"></i></button>
-        <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
-        
-        <input type="hidden" id="editBatchId">
-        
-        <label>اسم الدفعة</label>
-        <input type="text" id="editBName">
-        
-        <div class="grid-2">
-            <div>
-                <label>البيض الكلي</label>
-                <input type="number" id="editBEggs">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalEditBatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
+            
+            <input type="hidden" id="editBatchId">
+            
+            <label>اسم الدفعة</label>
+            <input type="text" id="editBName">
+            
+            <div class="grid-2">
+                <div>
+                    <label>البيض الكلي</label>
+                    <input type="number" id="editBEggs">
+                </div>
+                <div>
+                    <label>تاريخ الدخول</label>
+                    <input type="datetime-local" id="editBDate">
+                </div>
             </div>
-            <div>
-                <label>تاريخ الدخول</label>
-                <input type="datetime-local" id="editBDate">
-            </div>
+            
+            <button class="btn btn-info" onclick="saveEditBatch()">حفظ التعديلات</button>
         </div>
-        
-        <button class="btn btn-info" onclick="saveEditBatch()">حفظ التعديلات</button>
     </div>
-</div>
 
     <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
     
@@ -507,16 +501,42 @@
     </div>
 
     <div id="modalClassify" class="modal-overlay">
-    <div class="modal-content">
-        <button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button>
-        <h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3>
-        <input type="hidden" id="classBatchId">
-        
-        <div class="grid-2"></div>
-        
-        <button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button>
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3>
+            <input type="hidden" id="classBatchId">
+            
+            <div class="grid-2"></div>
+            
+            <button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button>
+        </div>
     </div>
-</div>
+
+    <div id="modalManageFreezer" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalManageFreezer')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--text-primary);">⚙️ إدارة أصناف الفريزر</h3>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px;">
+                <h4 style="margin-top: 0;">إضافة صنف جديد</h4>
+                <div class="grid-2">
+                    <div>
+                        <label>اسم الصنف (مثال: رويال، جامبو)</label>
+                        <input type="text" id="masterCatName" placeholder="أدخل اسم الصنف">
+                    </div>
+                    <div>
+                        <label>السعر الافتراضي (اختياري)</label>
+                        <input type="number" id="masterCatPrice" placeholder="السعر">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="addCategoryFromMaster()" style="margin-top: 15px;">➕ إضافة الصنف</button>
+            </div>
+
+            <h4>الأصناف الحالية</h4>
+            <div id="freezerCategoriesList" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px dashed var(--border); border-radius: 8px;">
+            </div>
+        </div>
+    </div>
 
     <script>
         function updateIcon() {
@@ -554,35 +574,6 @@
             <div id="cmdResults" style="max-height: 350px; overflow-y: auto; padding: 10px;"></div>
         </div>
     </div>
-<!-- نافذة إدارة أصناف الفريزر -->
-<div id="modalManageFreezer" class="modal-overlay">
-    <div class="modal-content">
-        <button class="close-modal" onclick="closeModal('modalManageFreezer')"><i class="fas fa-times"></i></button>
-        <h3 style="margin-top: 0; color: var(--text-primary);">⚙️ تحكم كامل بأصناف الفريزر</h3>
-        
-        <!-- فورم إضافة صنف جديد -->
-        <div style="margin-bottom: 20px; padding: 15px; background: #f4f6f8; border-radius: 8px;">
-            <h4 style="margin-top: 0;">إضافة صنف جديد</h4>
-            <div class="grid-2">
-                <div>
-                    <label>اسم الصنف (مثال: رويال، جامبو)</label>
-                    <input type="text" id="newCatName" placeholder="أدخل اسم الصنف">
-                </div>
-                <div>
-                    <label>السعر الافتراضي (اختياري)</label>
-                    <input type="number" id="newCatPrice" placeholder="السعر">
-                </div>
-            </div>
-            <button class="btn btn-success" onclick="addFreezerCategory()" style="margin-top: 10px;">➕ إضافة الصنف</button>
-        </div>
-
-        <!-- قائمة الأصناف الحالية -->
-        <h4>الأصناف الحالية</h4>
-        <div id="freezerCategoriesList" style="max-height: 300px; overflow-y: auto;">
-            <!-- سيتم حقن الأصناف هنا بواسطة JS -->
-        </div>
-    </div>
-</div>
 
 </body>
 </html>
