@@ -35,6 +35,55 @@ window.switchSettingsTab = (tabId, element) => {
     element.classList.add('active');
     document.getElementById(`tab-${tabId}`).classList.add('active');
 };
+// ================= إعدادات المظهر والـ Themes =================
+
+// تطبيق الإعدادات المحفوظة أول ما الموقع يفتح
+const savedTheme = localStorage.getItem('erp_theme') || 'light';
+const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
+document.documentElement.setAttribute('data-theme', savedTheme);
+document.documentElement.style.setProperty('--primary', savedColor);
+
+window.setThemeMode = (mode, el) => {
+    document.documentElement.setAttribute('data-theme', mode);
+    localStorage.setItem('erp_theme', mode);
+    
+    // تحديث شكل الأزرار (Active state)
+    if(el) {
+        const siblings = el.parentElement.querySelectorAll('.theme-option');
+        siblings.forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    }
+    
+    // إعادة رسم الرسم البياني في الداشبورد عشان ألوانه تتحدث مع الـ Dark Mode!
+    if(window.renderDashboardChart) window.renderDashboardChart(); 
+    
+    showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
+};
+
+window.setPrimaryColor = (color, el) => {
+    document.documentElement.style.setProperty('--primary', color);
+    localStorage.setItem('erp_primary_color', color);
+    
+    // تحديث شكل الدوائر (Active state)
+    if(el) {
+        const siblings = el.parentElement.querySelectorAll('.color-circle');
+        siblings.forEach(s => s.classList.remove('active'));
+        el.classList.add('active');
+    }
+    
+    showToast("تم تغيير لون النظام بنجاح 🎨");
+};
+
+// تظبيط الـ Active Classes عند فتح صفحة الإعدادات
+document.addEventListener('DOMContentLoaded', () => {
+    if(savedTheme === 'dark') {
+        const darkBtn = document.querySelectorAll('.theme-option')[1];
+        if(darkBtn) darkBtn.classList.add('active');
+    } else {
+        const lightBtn = document.querySelectorAll('.theme-option')[0];
+        if(lightBtn) lightBtn.classList.add('active');
+    }
+});
 
 window.openModal = (id) => {
     if(id === 'modalBatch') {
