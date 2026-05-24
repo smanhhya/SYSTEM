@@ -244,7 +244,25 @@
         <div id="freezer" class="page-view">
             <div class="header-title">
                 <span>المخزون والفريزر</span>
-                <button class="btn btn-primary" onclick="openModal('modalAddCategory')" style="padding: 8px 16px;">+ صنف جديد</button>
+                <!-- نافذة إدارة أصناف الفريزر -->
+<div id="modalManageFreezer" class="modal-overlay">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeModal('modalManageFreezer')"><i class="fas fa-times"></i></button>
+        <h3 style="margin-top: 0; color: var(--text-primary);">⚙️ تحكم كامل بأصناف الفريزر</h3>
+        
+        <!-- فورم إضافة صنف جديد -->
+        <div style="margin-bottom: 20px; padding: 15px; background: #f4f6f8; border-radius: 8px;">
+            <h4 style="margin-top: 0;">إضافة صنف جديد</h4>
+            <div class="grid-2">
+                <div>
+                    <label>اسم الصنف (مثال: رويال، جامبو)</label>
+                    <input type="text" id="newCatName" placeholder="أدخل اسم الصنف">
+                </div>
+                <div>
+                    <label>السعر الافتراضي (اختياري)</label>
+                    <input type="number" id="newCatPrice" placeholder="السعر">
+                </div>
+            </div>
             </div>          
             <div class="card">
                 <div class="card-header">الأرصدة الحالية الشاملة</div>
