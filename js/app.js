@@ -836,6 +836,40 @@ window.openDailyGuide = (id) => {
         </div>`;
     openModal('modalDailyGuide');
 };
+// 1. دالة إضافة الصنف من نافذة الماستر
+window.addCategoryFromMaster = function() {
+    const name = document.getElementById('masterCatName').value.trim();
+    const price = document.getElementById('masterCatPrice').value;
+    
+    if (!name) {
+        alert("برجاء إضافة اسم الصنف");
+        return;
+    }
+    
+    // هنا تضع الكود الخاص بك لحفظ الصنف في قاعدة البيانات أو localStorage
+    // مثال:
+    // categories.push({ name: name, price: price });
+    // saveToStorage();
+    
+    alert("تم إضافة الصنف بنجاح!");
+    document.getElementById('masterCatName').value = '';
+    document.getElementById('masterCatPrice').value = '';
+    
+    // قم باستدعاء الدالة التي ترسم الأصناف في القائمة لتحديثها
+    // renderFreezerCategories(); 
+};
+
+// 2. دالة إظهار/إخفاء أزرار الحذف في سجل الإيداعات
+window.toggleLogDeletion = function() {
+    // تبديل الكلاس الذي يظهر أزرار الحذف في السجلات
+    const logs = document.getElementById('freezerLogs');
+    logs.classList.toggle('delete-mode-active');
+    
+    // يمكنك إضافة CSS بسيط في ملف ستايل لإظهار الأزرار المخبأة 
+    // .delete-btn { display: none; }
+    // .delete-mode-active .delete-btn { display: inline-block; }
+};
+
 
 // ================= 10. نظام الإنتاجية (Ctrl+K) =================
 const sysCmds = [
