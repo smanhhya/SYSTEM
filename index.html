@@ -455,7 +455,31 @@
             <button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button>
         </div>
     </div>
-    
+    <div id="modalEditBatch" class="modal-overlay">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeModal('modalEditBatch')"><i class="fas fa-times"></i></button>
+        <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
+        
+        <input type="hidden" id="editBatchId">
+        
+        <label>اسم الدفعة</label>
+        <input type="text" id="editBName">
+        
+        <div class="grid-2">
+            <div>
+                <label>البيض الكلي</label>
+                <input type="number" id="editBEggs">
+            </div>
+            <div>
+                <label>تاريخ الدخول</label>
+                <input type="datetime-local" id="editBDate">
+            </div>
+        </div>
+        
+        <button class="btn btn-info" onclick="saveEditBatch()">حفظ التعديلات</button>
+    </div>
+</div>
+
     <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
     
     <div id="modalSale" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3><label>الصنف</label><select id="sGrade" onchange="calculateSaleTotal()"><option value="royal">رويال</option><option value="super_special">سوبر سبشيال</option><option value="special">سبشيال</option><option value="jumbo">جامبو</option><option value="super">سوبر</option><option value="bad">كسر / فرز</option></select><label>العدد (جوز)</label><input type="number" id="sQty" oninput="calculateSaleTotal()"><div style="background:var(--bg-main); padding:15px; border-radius:10px; border:1px solid var(--border); margin-top:15px; text-align:center;"><span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span><div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div></div><button class="btn btn-success" onclick="processSale()">تأكيد البيع</button></div></div>
@@ -478,7 +502,17 @@
         </div>
     </div>
 
-    <div id="modalClassify" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3><input type="hidden" id="classBatchId"><div class="grid-2"><div><label>رويال</label><input type="number" id="c_royal" value="0"></div><div><label>سوبر سبشيال</label><input type="number" id="c_super_special" value="0"></div><div><label>سبشيال</label><input type="number" id="c_special" value="0"></div><div><label>جامبو</label><input type="number" id="c_jumbo" value="0"></div><div><label>سوبر</label><input type="number" id="c_super" value="0"></div><div><label>فرز/كسر</label><input type="number" id="c_bad" value="0"></div></div><button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button></div></div>
+    <div id="modalClassify" class="modal-overlay">
+    <div class="modal-content">
+        <button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button>
+        <h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3>
+        <input type="hidden" id="classBatchId">
+        
+        <div class="grid-2"></div>
+        
+        <button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button>
+    </div>
+</div>
 
     <script>
         function updateIcon() {
