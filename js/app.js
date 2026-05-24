@@ -19,11 +19,21 @@ let globalSettings = {
     birdType: 'quail', feedPrice: 30, quailChick: 3.5, chickenChick: 25, turkeyChick: 60, turkeyEgg: 10 
 };
 
-// ================= 2. التبديل والواجهة (UI) =================
+// ================= حل نهائي للتنقل بين الصفحات (موبايل + لاب توب) =================
 window.switchPage = (pageId) => {
-    const e = window.event;
-    switchPage(pageId, e ? e.currentTarget : null);
+    // إخفاء كل الصفحات
+    document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+    // إظهار الصفحة المطلوبة
+    const targetPage = document.getElementById(pageId);
+    if(targetPage) targetPage.classList.add('active');
+    
+    // تظبيط لون الزرار النشط في القائمة الجانبية والسفلية
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (window.event && window.event.currentTarget) {
+        window.event.currentTarget.classList.add('active');
+    }
 };
+
 
 window.switchSettingsTab = (tabId, element) => {
     document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
