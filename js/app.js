@@ -612,8 +612,17 @@ function formatDateTime(isoString) {
     return `${date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })} (${pad(date.getHours())}:${pad(date.getMinutes())})`;
 }
 
+// دالة العرض بعد إضافة خريطة التواريخ التفصيلية للمفرخ والتربية
 function renderBatches() {
-    const ui = { inc: document.getElementById('incubatorList'), rear: document.getElementById('rearingList'), slaugh: document.getElementById('slaughterList'), alerts: document.getElementById('alertsContainer'), dSelect: document.getElementById('dBatch'), eSelect: document.getElementById('eBatch'), rSelect: document.getElementById('reportBatchSelect') };
+    const ui = { 
+        inc: document.getElementById('incubatorList'), 
+        rear: document.getElementById('rearingList'), 
+        slaugh: document.getElementById('slaughterList'), 
+        alerts: document.getElementById('alertsContainer'), 
+        dSelect: document.getElementById('dBatch'), 
+        eSelect: document.getElementById('eBatch'), 
+        rSelect: document.getElementById('reportBatchSelect') 
+    };
     
     if(!ui.inc) return;
     ui.inc.innerHTML = ''; ui.rear.innerHTML = ''; ui.slaugh.innerHTML = ''; ui.alerts.innerHTML = ''; 
@@ -638,19 +647,33 @@ function renderBatches() {
         const hoursToHatch = (new Date(b.hatchDate) - now) / 3600000;
         const daysToSlaughter = (new Date(b.rearDate) - now) / 86400000;
 
-        if (b.status === 'incubator') {
+        if (b.status === 'incubator' || b.status === 'hatcher') {
             stats.eggs += b.initialEggs;
             const daysIn = (Math.floor((now - new Date(b.insertDate)) / 3600000) / 24).toFixed(1);
-            let badge = `<span class="badge" style="background:var(--info);">حضانة</span>`, actionBtn = '';
+            let badge = '', actionBtn = '';
             
-            if (hoursToHatcher > 0 && hoursToHatcher <= 72) {
-                const daysLeft = Math.ceil(hoursToHatcher / 24);
-                ui.alerts.innerHTML += `<div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--warning); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">⏳ الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> للنزول للمفقس.</div>`;
-            }
-            if(hoursToHatcher <= 0) { 
-                actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
-                ui.alerts.innerHTML += `<div style="color:var(--info); font-weight:bold; margin-bottom: 8px;">⚠️ الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للنقل للمفقس!</div>`; 
-                batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
+            if(b.status === 'incubator') {
+                badge = `<span class="badge" style="background:var(--info);">حضانة</span>`;
+                if (hoursToHatcher > 0 && hoursToHatcher <= 72) {
+                    const daysLeft = Math.ceil(hoursToHatcher / 24);
+                    ui.alerts.innerHTML += `<div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--warning); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">⏳ الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> للنزول للمفقس.</div>`;
+                }
+                if(hoursToHatcher <= 0) { 
+                    actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
+                    ui.alerts.innerHTML += `<div style="color:var(--info); font-weight:bold; margin-bottom: 8px;">⚠️ الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للنقل للمفقس!</div>`; 
+                    batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
+                }
+            } else {
+                badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`;
+                if (hoursToHatch > 0 && hoursToHatch <= 72) {
+                    const daysLeft = Math.ceil(hoursToHatch / 24);
+                    ui.alerts.innerHTML += `<div style="background: rgba(14, 165, 233, 0.1); border-right: 4px solid var(--info); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🐣 الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> على الفقس.</div>`;
+                }
+                if(hoursToHatch <= 0) { 
+                    actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
+                    ui.alerts.innerHTML += `<div style="color:var(--success); font-weight:bold; margin-bottom: 8px;">🐣 الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للفقس الآن!</div>`; 
+                    batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px; animation: pulse 2s infinite;">🔔 حان موعد الفقس!</div>`;
+                }
             }
 
             ui.inc.innerHTML += `
@@ -666,57 +689,19 @@ function renderBatches() {
                     </div>
                     ${badge}
                 </div>
+                
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>تاريخ الدخول:</span> <strong>${formatDateTime(b.insertDate)}</strong></div>
-                    <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس المتوقع:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
-                    <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
-                    <span>مر ${daysIn} يوم</span>
-                </div>
-                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
-                    <div style="display:flex; gap:5px;">
-                        <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
-                        <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
-                        <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
-                        <button onclick="openEditBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
-                        <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>دخول الماكينة:</span> <strong style="color:var(--text-primary);">${formatDateTime(b.insertDate)}</strong>
                     </div>
-                    <div style="display:flex; gap:5px;">${actionBtn}</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <span>نزول المفقس:</span> <strong style="color:var(--info);">${formatDateTime(b.hatcherDate)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span>موعد الفقس والخروج:</span> <strong style="color:var(--success);">${formatDateTime(b.hatchDate)}</strong>
+                    </div>
                 </div>
-            </div>`;
-        } else if (b.status === 'hatcher') {
-            stats.eggs += b.initialEggs;
-            const daysIn = (Math.floor((now - new Date(b.insertDate)) / 3600000) / 24).toFixed(1);
-            let badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`, actionBtn = '';
-            
-            if (hoursToHatch > 0 && hoursToHatch <= 72) {
-                const daysLeft = Math.ceil(hoursToHatch / 24);
-                ui.alerts.innerHTML += `<div style="background: rgba(14, 165, 233, 0.1); border-right: 4px solid var(--info); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🐣 الدفعة <b>${b.name}</b> متبقي لها <b>${daysLeft} أيام</b> على الفقس.</div>`;
-            }
-            if(hoursToHatch <= 0) { 
-                actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
-                ui.alerts.innerHTML += `<div style="color:var(--success); font-weight:bold; margin-bottom: 8px;">🐣 الدفعة <b>${b.name}</b> (${bIcon}) جاهزة للفقس الآن!</div>`; 
-                batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px; animation: pulse 2s infinite;">🔔 حان موعد الفقس!</div>`;
-            }
 
-            ui.inc.innerHTML += `
-            <div class="batch-card stage-${b.status}">
-                ${batchAlertHtml}
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:24px;">${bIcon}</span>
-                        <div>
-                            <strong style="font-size:18px; color:var(--text-primary); display:block;">${b.name}</strong>
-                            <span style="font-size:12px; color:var(--text-secondary);">${bTypeName}</span>
-                        </div>
-                    </div>
-                    ${badge}
-                </div>
-                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>تاريخ الدخول:</span> <strong>${formatDateTime(b.insertDate)}</strong></div>
-                    <div style="display:flex; justify-content:space-between; color:var(--text-secondary);"><span>موعد الفقس:</span> <strong>${formatDateTime(b.hatchDate)}</strong></div>
-                </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
                     <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
                     <span>مر ${daysIn} يوم</span>
@@ -748,6 +733,16 @@ function renderBatches() {
                 <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
                 <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span>
             </div>
+            
+            <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-top: 10px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>بداية التربية (الفقس):</span> <strong style="color:var(--text-primary);">${formatDateTime(b.hatchDate)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>موعد الذبح المتوقع:</span> <strong style="color:var(--danger);">${formatDateTime(b.rearDate)}</strong>
+                </div>
+            </div>
+
             <div style="font-size:12px; color:var(--primary); margin-top:10px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div>
             <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;">
                 <div>متبقي: <b style="font-size:18px;">${alive}</b></div>
@@ -791,6 +786,7 @@ function renderBatches() {
     if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
+
 
 // ================= 8. التقارير والماليات =================
 onValue(ref(db, "ledger"), (snapshot) => {
