@@ -637,9 +637,11 @@ function renderBatches() {
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
-// ================= 9. رندر الفريزر الديناميكي =================
+// ================= رندر الفريزر الجديد (مع حماية الفريزر الفاضي) =================
 onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
     dynamicFreezerConfig = snapshot.exists() ? snapshot.val() : {};
+    
+    // تحديث قائمة المبيعات أوتوماتيكياً
     const saleSelect = document.getElementById('sGrade');
     if(saleSelect) {
         saleSelect.innerHTML = '<option value="">-- اختر الصنف --</option>';
@@ -647,6 +649,38 @@ onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
             saleSelect.innerHTML += `<option value="${id}">${dynamicFreezerConfig[id].name}</option>`;
         });
     }
+
+    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
+        const stock = stockSnap.exists() ? stockSnap.val() : {};
+        const grid = document.getElementById('freezerGrid');
+        const dashTotal = document.getElementById('dashFreezer');
+        if(!grid) return;
+        
+        grid.innerHTML = ''; let totalCount = 0;
+        const configKeys = Object.keys(dynamicFreezerConfig);
+        
+        // لو الفريزر لسه فاضي ومفيش أصناف اتعملت
+        if(configKeys.length === 0) {
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 30px; border: 2px dashed var(--border); border-radius: 12px; color: var(--text-secondary);">
+                <i class="fas fa-box-open" style="font-size: 40px; margin-bottom: 10px; color: var(--warning);"></i><br>
+                الفريزر فارغ حالياً.<br>اضغط على <b>(+ صنف جديد)</b> بالأعلى لإضافة (رويال، جامبو، إلخ).
+            </div>`;
+        } else {
+            // لو فيه أصناف، ارسم الكروت
+            configKeys.forEach(id => {
+                const item = dynamicFreezerConfig[id]; const qty = stock[id] || 0; totalCount += qty;
+                grid.innerHTML += `
+                    <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" style="cursor:pointer; text-align:center; padding:15px; margin:0; border: 2px solid transparent;">
+                        <h4 style="margin:0; color:var(--text-secondary); font-size:16px;">${item.name}</h4>
+                        <div style="font-size:32px; font-weight:900; color:var(--primary); margin:10px 0;">${qty} <span style="font-size:14px;">جوز</span></div>
+                        <div style="font-size:13px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px; border-radius: 6px;">السعر: ${item.price} ج.م <i class="fas fa-edit"></i></div>
+                    </div>`;
+            });
+        }
+        if(dashTotal) dashTotal.innerText = totalCount;
+    });
+});
+
 
     get(ref(db, "inventory/freezerStock")).then(stockSnap => {
         const stock = stockSnap.exists() ? stockSnap.val() : {};
