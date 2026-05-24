@@ -592,17 +592,41 @@ if (!document.getElementById('dynamicStyles')) {
     document.head.appendChild(style);
 }
 
-// ================= الفريزر وتقارير P&L =================
-onValue(ref(db, "inventory/freezer"), (snapshot) => {
-    const data = snapshot.exists() ? snapshot.val() : {}; let total = 0; let html = '';
-    Object.keys(gradeNames).forEach(g => { if(g === 'bad') return; const count = data[g] || 0; total += count; html += `<div style="background:var(--bg-main); padding:15px; border-radius:10px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary); font-weight:bold;">${gradeNames[g]}</span><div style="font-size:22px; font-weight:800; color:var(--primary); margin-top:5px;">${count}</div></div>`; });
+// ================= رندر الفريزر الجديد (ديناميكي بالكامل) =================
+onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
+    const config = snapshot.exists() ? snapshot.val() : {};
     
-    const freezerGrid = document.getElementById('freezerGrid');
-    if(freezerGrid) freezerGrid.innerHTML = html; 
-    
-    const dashFreezer = document.getElementById('dashFreezer');
-    if(dashFreezer) dashFreezer.innerText = total;
+    // هنسحب كمان الأرصدة عشان نحطها جنب الأسماء
+    get(ref(db, "inventory/freezerStock")).then(stockSnap => {
+        const stock = stockSnap.exists() ? stockSnap.val() : {};
+        const grid = document.getElementById('freezerGrid');
+        const dashTotal = document.getElementById('dashFreezer');
+        
+        if(!grid) return;
+        
+        grid.innerHTML = '';
+        let totalCount = 0;
+        
+        Object.keys(config).forEach(id => {
+            const item = config[id];
+            const qty = stock[id] || 0;
+            totalCount += qty; // بنحسب الإجمالي عشان الداشبورد
+            
+            grid.innerHTML += `
+                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
+                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border);">
+                    <h4 style="margin:0;">${item.name}</h4>
+                    <div style="font-size:22px; font-weight:800; color:var(--primary); margin:5px 0;">${qty}</div>
+                    <div style="font-size:12px; color:var(--text-secondary);">السعر: ${item.price} ج.م</div>
+                </div>
+            `;
+        });
+        
+        // تحديث إجمالي الفريزر في الداشبورد
+        if(dashTotal) dashTotal.innerText = totalCount;
+    });
 });
+
 
 onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
     allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; let html = ''; const now = new Date();
