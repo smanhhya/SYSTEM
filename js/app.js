@@ -25,6 +25,16 @@ window.switchPage = (pageId) => {
     const e = window.event;
     switchPage(pageId, e ? e.currentTarget : null);
 };
+// التبديل بين تبويبات الإعدادات
+window.switchSettingsTab = (tabId, element) => {
+    // إزالة الأكتيف من كل الزراير والتبويبات
+    document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.settings-tab').forEach(el => el.classList.remove('active'));
+    
+    // إضافة الأكتيف للزرار والتبويب المطلوب
+    element.classList.add('active');
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+};
 
 window.openModal = (id) => {
     if(id === 'modalBatch') {
