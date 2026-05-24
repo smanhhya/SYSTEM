@@ -281,7 +281,17 @@ window.resetSystem = async () => {
     }
 };
 
-window.updateStage = async (id, stage) => { await update(ref(db, `batches/${id}`), { status: stage }); };
+window.updateStage = async (id, stage) => { 
+    // لو المرحلة ذبح، لازم نأكد الأول
+    if (stage === 'slaughter') {
+        if (!confirm("⚠️ هل أنت متأكد؟ هذا الإجراء سينقل الدفعة لمرحلة الذبح ولا يمكن التراجع عنه بسهولة!")) {
+            return; // لو داس كنسل، مش هنعمل حاجة
+        }
+    }
+    await update(ref(db, `batches/${id}`), { status: stage }); 
+    showToast("تم تحديث حالة الدفعة بنجاح");
+};
+
 window.promptHatch = (id) => { document.getElementById('hatchBatchId').value = id; openModal('modalHatch'); };
 window.moveToRearing = async () => {
     const id = document.getElementById('hatchBatchId').value; 
@@ -441,11 +451,22 @@ function renderBatches() {
         }
         else if (b.status === 'slaughter') { 
             ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter"><div style="display:flex; justify-content:space-between; align-items:center;"><div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> <span class="badge" style="background:var(--danger);">قيد الذبح</span></div>
-            <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                <div style="display:flex; gap:5px;"><button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button><button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button></div>
-                <button class="btn btn-success" style="margin:0; padding:8px;" onclick="promptClassify('${id}')">تصنيف وترحيل ❄️</button>
-            </div></div>`; 
-        }
+            // استبدل الـ batch-actions القديمة في الـ rearing بـ دي:
+<div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
+    <div style="display:flex; gap:8px;">
+        <button onclick="renameBatch('${id}')" title="تعديل الاسم" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
+        <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color: #ef4444; font-size:18px;">🗑️</button>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <button class="btn" style="background: #0ea5e9; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="openDailyGuide('${id}')">
+            <i class="fas fa-clipboard-check"></i> مهام
+        </button>
+        <button class="btn" style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="updateStage('${id}','slaughter')">
+            <i class="fas fa-knife"></i> للذبح 🔪
+        </button>
+    </div>
+</div>
+
     });
 
     
