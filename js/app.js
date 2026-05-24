@@ -381,13 +381,32 @@ window.promptHatch = (id) => { const el = document.getElementById('hatchBatchId'
 window.moveToRearing = async () => {
     const id = document.getElementById('hatchBatchId')?.value;
     const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
+    const unfert = parseInt(document.getElementById('hUnfert')?.value) || 0;
+    const dead = parseInt(document.getElementById('hDead')?.value) || 0;
     const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
-    if(!id || !healthy) return showToast("أدخل العدد الصحيح", true);
     
-    const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
-    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate, rearingSystem: rearingSys, unfertilized: parseInt(document.getElementById('hUnfert')?.value)||0, deadInShell: parseInt(document.getElementById('hDead')?.value)||0 });
-    closeModal('modalHatch'); showToast("تم النقل للتربية");
+    if(!id || healthy < 0) return showToast("أدخل أرقاماً صحيحة", true);
+    
+    const initialEggs = allBatches[id].initialEggs;
+    const totalOut = healthy + unfert + dead;
+
+    // 🛡️ الحارس المنطقي:
+    if (totalOut > initialEggs) {
+        return showToast(`❌ مستحيل منطقياً! مجموع المخرجات (${totalOut}) أكبر من البيض المدخل للمفرخ (${initialEggs})!`, true);
+    }
+    
+    const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
+    await update(ref(db, `batches/${id}`), { 
+        status: 'rearing', 
+        hatchedChicks: healthy, 
+        hatchRate: hatchRate, 
+        rearingSystem: rearingSys, 
+        unfertilized: unfert, 
+        deadInShell: dead 
+    });
+    closeModal('modalHatch'); showToast("تم النقل للتربية بنجاح");
 };
+
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
@@ -438,36 +457,54 @@ window.finishSlaughter = async () => {
     const id = classIdEl ? classIdEl.value : null;
     if(!id) return;
     
-    let yieldTotal = 0; const toAdd = {};
+    const b = allBatches[id];
+    const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
+    
+    let yieldPairs = 0; const toAdd = {};
     
     Object.keys(dynamicFreezerConfig).forEach(catId => { 
         const inputEl = document.getElementById(`c_${catId}`);
         const val = inputEl ? (parseInt(inputEl.value) || 0) : 0; 
-        toAdd[catId] = val; 
-        yieldTotal += val; 
+        if(val > 0) { toAdd[catId] = val; yieldPairs += val; }
     });
     
-    if(yieldTotal === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
+    if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
+
+    // 🛡️ الحارس المنطقي (كل جوز = 2 طائر):
+    const totalProcessedBirds = yieldPairs * 2;
+    if (totalProcessedBirds > aliveBirds) {
+        return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
+    }
 
     const stockSnap = await get(ref(db, "inventory/freezerStock")); 
     let currentStock = stockSnap.exists() ? stockSnap.val() : {};
     Object.keys(toAdd).forEach(catId => currentStock[catId] = (currentStock[catId]||0) + toAdd[catId]);
     
     await set(ref(db, "inventory/freezerStock"), currentStock);
-    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: allBatches[id].name, birdType: allBatches[id].birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
-    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldTotal, classifyData: toAdd });
+    await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: b.name, birdType: b.birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
+    await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldPairs, classifyData: toAdd });
     
     closeModal('modalClassify'); showToast("تم تصنيف الدفعة والترحيل للفريزر ❄️");
 };
+
 
 // ================= 6. المبيعات والمصروفات =================
 window.saveDailyLog = async () => {
     const id = document.getElementById('dBatch')?.value;
     const dead = parseInt(document.getElementById('dDead')?.value) || 0;
     const feed = parseFloat(document.getElementById('dFeed')?.value) || 0;
-    if(!id || (dead===0 && feed===0)) return showToast("أدخل بيانات صحيحة", true);
+    if(!id || (dead===0 && feed===0) || dead < 0 || feed < 0) return showToast("أدخل بيانات صحيحة", true);
 
-    const b = allBatches[id]; const today = new Date().toISOString().split('T')[0];
+    const b = allBatches[id]; 
+    const today = new Date().toISOString().split('T')[0];
+    
+    const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
+
+    // 🛡️ الحارس المنطقي للنافق:
+    if (dead > aliveBirds) {
+        return showToast(`❌ خطأ: المتبقي بالعنبر (${aliveBirds} طائر) وأنت تحاول تسجيل (${dead}) نافق!`, true);
+    }
+
     await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
 
     if(feed > 0) {
@@ -478,6 +515,7 @@ window.saveDailyLog = async () => {
     await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
     closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك");
 };
+
 
 window.calculateSaleTotal = () => {
     const grade = document.getElementById('sGrade')?.value;
