@@ -15,16 +15,135 @@
 
     <style>
         /* ================= 1. DESIGN SYSTEM VARIABLES ================= */
+                /* ================= 1. Design System & Tokens (Farm OS) ================= */
         :root {
-            --bg-main: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
-            --primary: #2563eb; --primary-hover: #1d4ed8;
-            --text-primary: #0f172a; --text-secondary: #64748b;
-            --success: #16a34a; --warning: #d97706; --danger: #dc2626; --info: #0284c7;
-            --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; --space-xxl: 32px;
-            --radius-card: 16px; --radius-btn: 12px; --radius-input: 12px;
-            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            --transition-smooth: all 0.25s ease-out;
+            /* الألوان: هادئة، احترافية، ومريحة للعين لفترات طويلة */
+            --bg-main: #0f172a;       /* عمق السيستم */
+            --surface: #1e293b;       /* الكروت والعناصر المرفوعة */
+            --primary: #3b82f6;       /* الأكشن الأساسي (أزرق مريح) */
+            --primary-hover: #2563eb;
+            --accent: #0ea5e9;        /* لون ثانوي للتمييز */
+            --success: #10b981;       /* أخضر هادئ للمكاسب */
+            --warning: #f59e0b;       
+            --danger: #ef4444;        /* أحمر غير مزعج للتحذيرات */
+            --text-primary: #f8fafc;  /* نصوص واضحة */
+            --text-secondary: #94a3b8; /* نصوص ثانوية لتقليل الضغط البصري (يهمس) */
+            --border: #334155;        /* حدود ناعمة جداً بالكاد تُرى */
+
+            /* المسافات: لتوفير Breathing Space */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 24px;
+            --space-xl: 32px;
+
+            /* الحواف والظلال: نعومة وتأثيرات زجاجية خفيفة */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-card: 16px;
+            --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+            --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        /* ================= 2. Base Typography & Hierarchy ================= */
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            font-family: 'Cairo', sans-serif;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            margin: 0; padding: 0;
+        }
+
+        /* المهم يصرخ، والثانوي يهمس */
+        .header-title {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            margin-bottom: var(--space-lg);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* ================= 3. Card System (Operation Cockpit) ================= */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-card);
+            padding: var(--space-lg);
+            box-shadow: var(--shadow-soft);
+            transition: var(--transition-smooth);
+            margin-bottom: var(--space-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Subtle Hover للمتعة البصرية */
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(59, 130, 246, 0.3); 
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: var(--space-md);
+            padding-bottom: var(--space-sm);
+            border-bottom: 1px dashed var(--border);
+        }
+
+        /* ================= 4. Micro-interactions (Button System) ================= */
+        .btn {
+            padding: 10px var(--space-md);
+            border-radius: var(--radius-md);
+            font-weight: 700;
+            font-size: 14px;
+            transition: var(--transition-smooth);
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* تأثير النبض (Vibration) عند الضغط */
+        .btn:active {
+            transform: scale(0.95); 
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+        }
+        .btn-primary:hover { 
+            background: var(--primary-hover); 
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4); 
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        .btn-danger:hover {
+            background: var(--danger);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+        }
+
+        /* ================= 5. Data Density (Tables & Grids) ================= */
+        .grid-2, .grid-3 {
+            display: grid;
+            gap: var(--space-md);
+        }
+        .grid-2 { grid-template-columns: 1fr 1fr; }
+        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
 
         [data-theme="dark"] {
             --bg-main: #0f172a; --surface: #1e293b; --border: #334155;
