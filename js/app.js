@@ -429,45 +429,60 @@ function renderBatches() {
                 </div>
             </div>`;
         }
-        else if (b.status === 'rearing') {
+                else if (b.status === 'rearing') {
             const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive; 
             const age = Math.floor((now - new Date(b.hatchDate)) / 86400000); 
             if(ui.dSelect) ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
             if(age >= std.slaughter) ui.alerts.innerHTML += `<div style="color:var(--warning);">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
             
-            ui.rear.innerHTML += `<div class="batch-card stage-rearing"><div style="display:flex; justify-content:space-between; align-items:center;"><div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span></div>
+            ui.rear.innerHTML += `<div class="batch-card stage-rearing">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
+                <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span>
+            </div>
             <div style="font-size:12px; color:var(--primary); margin-top:10px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div>
-            <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;"><div>متبقي: <b style="font-size:18px;">${alive}</b></div><div>استهلكت: <b style="font-size:18px;">${b.totalFeed||0} ك</b></div></div>
+            <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;">
+                <div>متبقي: <b style="font-size:18px;">${alive}</b></div>
+                <div>استهلكت: <b style="font-size:18px;">${b.totalFeed||0} ك</b></div>
+            </div>
+            <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
+                <div style="display:flex; gap:8px;">
+                    <button onclick="renameBatch('${id}')" title="تعديل الاسم" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
+                    <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color: #ef4444; font-size:18px;">🗑️</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" style="background: #0ea5e9; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="openDailyGuide('${id}')">
+                        <i class="fas fa-clipboard-check"></i> مهام
+                    </button>
+                    <button class="btn" style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="updateStage('${id}','slaughter')">
+                        <i class="fas fa-knife"></i> للذبح 🔪
+                    </button>
+                </div>
+            </div></div>`;
+        }
+
+                else if (b.status === 'slaughter') { 
+            ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
+                <span class="badge" style="background:var(--danger);">قيد الذبح</span>
+            </div>
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
                 <div style="display:flex; gap:5px;">
                     <button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
                     <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
                 </div>
-                <div style="display:flex; gap:5px;">
-                    <button class="btn btn-info" style="margin:0; padding:8px 12px; font-size:13px;" onclick="openDailyGuide('${id}')"><i class="fas fa-clipboard-check"></i> مهام</button>
-                    <button class="btn btn-danger" style="margin:0; padding:8px 12px; font-size:13px;" onclick="updateStage('${id}','slaughter')">للذبح 🔪</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')">
+                        <i class="fas fa-undo"></i> تراجع ↩️
+                    </button>
+                    <button class="btn btn-success" style="margin:0; padding:6px 12px; font-size:13px;" onclick="promptClassify('${id}')">
+                        تصنيف ❄️
+                    </button>
                 </div>
-            </div></div>`;
+            </div></div>`; 
         }
-        else if (b.status === 'slaughter') { 
-            ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter"><div style="display:flex; justify-content:space-between; align-items:center;"><div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> <span class="badge" style="background:var(--danger);">قيد الذبح</span></div>
-            // استبدل الـ batch-actions القديمة في الـ rearing بـ دي:
-<div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-    <div style="display:flex; gap:8px;">
-        <button onclick="renameBatch('${id}')" title="تعديل الاسم" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
-        <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color: #ef4444; font-size:18px;">🗑️</button>
-    </div>
-    <div style="display:flex; gap:8px;">
-        <button class="btn" style="background: #0ea5e9; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="openDailyGuide('${id}')">
-            <i class="fas fa-clipboard-check"></i> مهام
-        </button>
-        <button class="btn" style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="updateStage('${id}','slaughter')">
-            <i class="fas fa-knife"></i> للذبح 🔪
-        </button>
-    </div>
-</div>
 
-    });
 
     
     if(ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ لا يوجد تنبيهات أو نواقص حالياً.</div>';
