@@ -240,6 +240,128 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
         if(dashTotal) dashTotal.innerText = totalCount;
     });
 });
+// 1. متغير عالمي لحفظ الأصناف
+window.freezerCategories = {};
+
+// 2. مراقبة التغييرات في الأصناف من Firebase بشكل لحظي
+import { onValue, set, update, remove, ref } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+onValue(ref(db, "settings/freezerCategories"), (snapshot) => {
+    window.freezerCategories = snapshot.val() || {};
+    // تحديث أي قائمة منسدلة أو شاشة تعتمد على هذه الأصناف
+    updateFreezerDropdowns();
+    // تحديث نافذة الإدارة إذا كانت مفتوحة
+    renderFreezerCategoriesList();
+});
+
+// 3. دالة فتح نافذة الإدارة
+window.openManageFreezer = () => {
+    openModal('modalManageFreezer');
+    renderFreezerCategoriesList();
+};
+
+// 4. دالة إضافة صنف جديد
+window.addFreezerCategory = async () => {
+    const nameInput = document.getElementById('newCatName');
+    const priceInput = document.getElementById('newCatPrice');
+    
+    const name = nameInput.value.trim();
+    const price = priceInput.value || 0;
+    
+    if (!name) {
+        alert("يرجى كتابة اسم الصنف!");
+        return;
+    }
+
+    // إنشاء ID فريد للصنف
+    const newId = 'cat_' + Date.now();
+    await set(ref(db, `settings/freezerCategories/${newId}`), {
+        name: name,
+        price: Number(price)
+    });
+
+    // تفريغ الحقول بعد الإضافة
+    nameInput.value = '';
+    priceInput.value = '';
+    showToast("تمت إضافة الصنف بنجاح");
+};
+
+// 5. دالة حذف صنف
+window.deleteFreezerCategory = async (id) => {
+    if(confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟ \nملاحظة: سيختفي من خيارات البيع والتصنيف الجديدة.")) {
+        await remove(ref(db, `settings/freezerCategories/${id}`));
+        showToast("تم الحذف بنجاح");
+    }
+};
+
+// 6. دالة تعديل صنف موجود
+window.editFreezerCategory = async (id) => {
+    const cat = window.freezerCategories[id];
+    const newName = prompt("تعديل اسم الصنف:", cat.name);
+    
+    if (newName && newName.trim() !== "") {
+        const newPrice = prompt("تعديل السعر:", cat.price);
+        await update(ref(db, `settings/freezerCategories/${id}`), {
+            name: newName.trim(),
+            price: Number(newPrice || cat.price)
+        });
+        showToast("تم التعديل بنجاح");
+    }
+};
+
+// 7. عرض الأصناف داخل النافذة
+window.renderFreezerCategoriesList = () => {
+    const container = document.getElementById('freezerCategoriesList');
+    if(!container) return;
+    
+    container.innerHTML = '';
+    
+    if(Object.keys(window.freezerCategories).length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:#777;">لا توجد أصناف مضافة حالياً.</p>';
+        return;
+    }
+
+    for (const [id, cat] of Object.entries(window.freezerCategories)) {
+        container.innerHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ddd; background: #fff; margin-bottom: 5px; border-radius: 5px;">
+                <div>
+                    <strong style="font-size: 16px;">${cat.name}</strong> 
+                    <span style="color: var(--success); font-size: 14px;">(السعر: ${cat.price})</span>
+                </div>
+                <div>
+                    <button class="btn btn-info" onclick="editFreezerCategory('${id}')" style="padding: 5px 10px; font-size: 12px;">✏️ تعديل</button>
+                    <button class="btn btn-danger" onclick="deleteFreezerCategory('${id}')" style="padding: 5px 10px; font-size: 12px;">🗑️ حذف</button>
+                </div>
+            </div>
+        `;
+    }
+};
+
+// 8. الدالة الأهم: تحديث القوائم في باقي النظام (البيع، والتصنيف)
+window.updateFreezerDropdowns = () => {
+    // 1. تحديث قائمة البيع المباشر
+    const sGrade = document.getElementById('sGrade'); 
+    if (sGrade) {
+        sGrade.innerHTML = '<option value="">-- اختر الصنف --</option>';
+        for (const [id, cat] of Object.entries(window.freezerCategories)) {
+            sGrade.innerHTML += `<option value="${id}">${cat.name}</option>`;
+        }
+    }
+    
+    // 2. تحديث شاشة تصنيف الدفعة (التي تظهر عند الذبح)
+    const classifyContainer = document.querySelector('#modalClassify .grid-2');
+    if (classifyContainer) {
+        classifyContainer.innerHTML = '';
+        for (const [id, cat] of Object.entries(window.freezerCategories)) {
+            classifyContainer.innerHTML += `
+                <div>
+                    <label>${cat.name} (عدد)</label>
+                    <input type="number" id="class_${id}" class="classify-input" data-id="${id}" placeholder="الكمية">
+                </div>
+            `;
+        }
+    }
+};
 
 window.addNewCategory = async () => {
     const name = document.getElementById('newCatName').value;
