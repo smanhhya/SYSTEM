@@ -284,12 +284,23 @@ window.resetSystem = async () => {
 window.updateStage = async (id, stage) => { await update(ref(db, `batches/${id}`), { status: stage }); };
 window.promptHatch = (id) => { document.getElementById('hatchBatchId').value = id; openModal('modalHatch'); };
 window.moveToRearing = async () => {
-    const id = document.getElementById('hatchBatchId').value; const healthy = parseInt(document.getElementById('hHealthy').value);
+    const id = document.getElementById('hatchBatchId').value; 
+    const healthy = parseInt(document.getElementById('hHealthy').value);
+    const rearingSys = document.getElementById('hRearingSystem').value; // سحب نوع التربية
     if(!healthy) return showToast("أدخل العدد", true);
+    
     const hatchRate = ((healthy / allBatches[id].initialEggs) * 100).toFixed(1);
-    await update(ref(db, `batches/${id}`), { status: 'rearing', hatchedChicks: healthy, hatchRate: hatchRate, unfertilized: parseInt(document.getElementById('hUnfert').value)||0, deadInShell: parseInt(document.getElementById('hDead').value)||0 });
+    await update(ref(db, `batches/${id}`), { 
+        status: 'rearing', 
+        hatchedChicks: healthy, 
+        hatchRate: hatchRate, 
+        rearingSystem: rearingSys, // حفظ نظام التربية
+        unfertilized: parseInt(document.getElementById('hUnfert').value)||0, 
+        deadInShell: parseInt(document.getElementById('hDead').value)||0 
+    });
     closeModal('modalHatch'); showToast("تم النقل للتربية");
 };
+
 
 window.promptClassify = (id) => { document.getElementById('classBatchId').value = id; openModal('modalClassify'); };
 window.finishSlaughter = async () => {
@@ -394,7 +405,7 @@ function renderBatches() {
                     <span>مر ${daysIn} يوم</span>
                 </div>
 
-                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
+                                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
                     <div style="display:flex; gap:5px;">
                         <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
                         <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
@@ -418,8 +429,14 @@ function renderBatches() {
             <div style="font-size:12px; color:var(--primary); margin-top:10px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div>
             <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;"><div>متبقي: <b style="font-size:18px;">${alive}</b></div><div>استهلكت: <b style="font-size:18px;">${b.totalFeed||0} ك</b></div></div>
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                <div style="display:flex; gap:5px;"><button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button><button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button></div>
-                <button class="btn btn-danger" style="margin:0; padding:8px;" onclick="updateStage('${id}','slaughter')">نقل للذبح 🔪</button>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="renameBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
+                    <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn btn-info" style="margin:0; padding:8px 12px; font-size:13px;" onclick="openDailyGuide('${id}')"><i class="fas fa-clipboard-check"></i> مهام</button>
+                    <button class="btn btn-danger" style="margin:0; padding:8px 12px; font-size:13px;" onclick="updateStage('${id}','slaughter')">للذبح 🔪</button>
+                </div>
             </div></div>`;
         }
         else if (b.status === 'slaughter') { 
@@ -430,6 +447,7 @@ function renderBatches() {
             </div></div>`; 
         }
     });
+
     
     if(ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ لا يوجد تنبيهات أو نواقص حالياً.</div>';
     if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
@@ -502,3 +520,88 @@ window.generateBatchReport = () => {
     } else { container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل وتُذبح بعد لإصدار بيان ختامي دقيق.</div>`; }
     container.style.display = 'block';
 };
+// ================= المساعد الذكي للتربية (دليل العامل) =================
+function getQuailDailyNeeds(age, aliveCount, system) {
+    let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
+    
+    // خوارزمية السمان من يوم 1 إلى 40
+    if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
+    else if (age <= 7) { temp = 35; feedPerBird = 6; meds = "أملاح معدنية وأحماض أمينية"; }
+    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو ماء شرب)"; }
+    else if (age <= 14) { temp = 31; feedPerBird = 11; if(age >= 13) meds = "جرعة وقاية: كوكسيديا وكلوستريديا"; }
+    else if (age <= 21) { temp = 28; feedPerBird = 15; meds = "فيتامينات (هـ سيلينيوم) لرفع المناعة"; }
+    else if (age <= 28) { temp = 25; feedPerBird = 20; meds = "ماء نقي"; }
+    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (يمنع إعطاء أدوية لفترة السحب)"; }
+    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - الدفعة جاهزة للذبح"; }
+
+    // الحسابات الكلية بناءً على العدد الحي
+    let totalFeedKg = (feedPerBird * aliveCount) / 1000;
+    // السمان يشرب ماء تقريباً ضعف ونصف إلى ضعفي كمية العلف
+    let totalWaterLiters = (totalFeedKg * 2.2); 
+    
+    // حساب المساحة: الأرضي 60 طائر للمتر، البطاريات 120 طائر للمتر (أرقام السمان البالغ لضمان الراحة)
+    let spaceRequired = system === 'battery' ? (aliveCount / 120) : (aliveCount / 60);
+
+    return { 
+        temp: temp, 
+        feed: totalFeedKg.toFixed(2), 
+        water: totalWaterLiters.toFixed(1), 
+        space: spaceRequired.toFixed(1), 
+        meds: meds 
+    };
+}
+
+window.openDailyGuide = (id) => {
+    const b = allBatches[id];
+    if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
+
+    const now = new Date();
+    const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; // إذا كان العمر 0 نعتبره اليوم الأول
+    const alive = b.hatchedChicks - (b.totalDead || 0);
+    const system = b.rearingSystem || 'floor';
+    const systemName = system === 'floor' ? 'أرضي (نشارة)' : 'بطاريات (أقفاص)';
+
+    const needs = getQuailDailyNeeds(age, alive, system);
+
+    const content = `
+        <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
+            <div style="text-align:center; margin-bottom:15px;">
+                <span style="font-size:14px; color:var(--text-secondary);">دفعة: <strong>${b.name}</strong></span><br>
+                <span style="font-size:18px; color:var(--primary); font-weight:800;">عمر: ${age} يوم</span>
+            </div>
+            
+            <div class="grid-2" style="gap:10px;">
+                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
+                    <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة المطلوبة</div>
+                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.temp} °C</div>
+                </div>
+                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--info);">
+                    <div style="font-size:12px; color:var(--text-secondary);">💧 المياه المطلوبة</div>
+                    <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.water} لتر</div>
+                </div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--warning);">
+                <div style="font-size:12px; color:var(--text-secondary);">🌾 كمية العلف لليوم بالكامل (${alive} طائر)</div>
+                <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
+                <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات أو الإضافات بالماء اليوم</div>
+                <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
+            </div>
+
+            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
+                <div style="font-size:12px; color:var(--text-secondary);">📏 المساحة ونوع التربية</div>
+                <div style="font-size:14px; font-weight:bold; color:var(--text-primary);">
+                    نظام: ${systemName} <br>
+                    مساحة العنبر المطلوبة: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('dailyGuideContent').innerHTML = content;
+    openModal('modalDailyGuide');
+};
+
