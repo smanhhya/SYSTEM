@@ -910,3 +910,91 @@ const cmdInput = document.getElementById('cmdInput');
 if(cmdInput) {
     cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
 }
+// ================= نظام الإنتاجية والبحث السريع (Command Palette) =================
+
+// قائمة الأوامر المتاحة في السيستم
+const systemCommands = [
+    { id: 'nav_dash', title: 'الانتقال إلى: لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
+    { id: 'nav_inc', title: 'الانتقال إلى: المفرخ (Incubator)', icon: 'fas fa-egg', action: () => switchPage('incubator') },
+    { id: 'nav_rear', title: 'الانتقال إلى: عنابر التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
+    { id: 'nav_slaugh', title: 'الانتقال إلى: الذبح والتصنيف', icon: 'fas fa-knife', action: () => switchPage('slaughter') },
+    { id: 'nav_freezer', title: 'الانتقال إلى: الفريزر والمخزون', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
+    { id: 'nav_finance', title: 'الانتقال إلى: الحسابات والماليات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
+    { id: 'nav_settings', title: 'الانتقال إلى: مركز الإعدادات', icon: 'fas fa-sliders-h', action: () => switchPage('settingsPage') },
+    { id: 'act_batch', title: 'إجراء: إضافة دفعة جديدة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
+    { id: 'act_feed', title: 'إجراء: شراء علف للمخزن 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
+    { id: 'act_sale', title: 'إجراء: تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') },
+    { id: 'act_exp', title: 'إجراء: تسجيل مصروفات 💸', icon: 'fas fa-receipt', action: () => openModal('modalExpense') },
+];
+
+window.openCommandPalette = () => {
+    const cp = document.getElementById('commandPalette');
+    if(!cp) return;
+    cp.classList.add('active');
+    setTimeout(() => document.getElementById('cmdInput').focus(), 100); // التركيز التلقائي على مربع البحث
+    renderCmdResults('');
+};
+
+window.closeCommandPalette = () => {
+    const cp = document.getElementById('commandPalette');
+    if(cp) cp.classList.remove('active');
+    const input = document.getElementById('cmdInput');
+    if(input) input.value = '';
+};
+
+const renderCmdResults = (query) => {
+    const container = document.getElementById('cmdResults');
+    if(!container) return;
+    container.innerHTML = '';
+    
+    // فلترة ذكية
+    const filtered = systemCommands.filter(c => c.title.toLowerCase().includes(query.toLowerCase()));
+    
+    if(filtered.length === 0) {
+        container.innerHTML = `<div style="padding: 15px; text-align: center; color: var(--text-secondary);">لا توجد أوامر مطابقة لـ "${query}"</div>`;
+        return;
+    }
+
+    filtered.forEach((cmd) => {
+        const el = document.createElement('div');
+        el.innerHTML = `<div style="display:flex; align-items:center; gap:12px;"><i class="${cmd.icon}" style="color: var(--primary); font-size: 16px; width: 20px; text-align: center;"></i> <span style="font-size: 15px; font-weight: bold;">${cmd.title}</span></div><span style="font-size: 11px; color: var(--text-secondary);">Click</span>`;
+        el.style.cssText = `padding: 12px 16px; cursor: pointer; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; color: var(--text-primary); transition: all 0.2s; margin-bottom: 4px;`;
+        
+        // تأثير احترافي عند مرور الماوس
+        el.onmouseover = () => { el.style.background = 'var(--primary)'; el.style.color = '#fff'; el.querySelector('i').style.color = '#fff'; el.querySelector('span:last-child').style.color = 'rgba(255,255,255,0.7)'; };
+        el.onmouseout = () => { el.style.background = 'transparent'; el.style.color = 'var(--text-primary)'; el.querySelector('i').style.color = 'var(--primary)'; el.querySelector('span:last-child').style.color = 'var(--text-secondary)'; };
+        
+        el.onclick = () => {
+            closeCommandPalette();
+            cmd.action();
+        };
+        container.appendChild(el);
+    });
+};
+
+// الاستماع للاختصارات من لوحة المفاتيح
+document.addEventListener('keydown', (e) => {
+    // فتح بـ Ctrl+K 
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); // منع المتصفح من فتح شريط البحث الافتراضي
+        openCommandPalette();
+    }
+    // إغلاق بـ ESC
+    if (e.key === 'Escape') {
+        closeCommandPalette();
+    }
+});
+
+// إغلاق لو ضغطت بالماوس بره المربع
+document.addEventListener('click', (e) => {
+    const cp = document.getElementById('commandPalette');
+    if (cp && e.target === cp) {
+        closeCommandPalette();
+    }
+});
+
+// تحديث النتائج فوراً مع كل حرف تكتبه
+const cmdInput = document.getElementById('cmdInput');
+if(cmdInput) {
+    cmdInput.addEventListener('input', (e) => renderCmdResults(e.target.value));
+}
