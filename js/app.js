@@ -887,8 +887,15 @@ window.generateBatchReport = () => {
         const yieldTotal = b.slaughterYield || 0; let potentialRevenue = 0; let outputHtml = '';
         Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (dynamicFreezerConfig[g]?.price || 0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${dynamicFreezerConfig[g]?.name || g}: ${b.classifyData[g]}</span>`; } });
         
-        const costPerPair = yieldTotal > 0 ? ((batchCost / yieldTotal) * 2).toFixed(2) : 0; const netProfit = potentialRevenue - batchCost;
-        const totalFeedKg = b.totalFeed || 0; const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / yieldTotal).toFixed(0) : 0; let fcrStatus = '';
+        // تم إزالة الضرب في 2 لأن yieldTotal يمثل عدد الأجواز فعلياً
+const costPerPair = yieldTotal > 0 ? (batchCost / yieldTotal).toFixed(2) : 0; 
+const netProfit = potentialRevenue - batchCost;
+
+const totalFeedKg = b.totalFeed || 0; 
+// تم ضرب yieldTotal في 2 هنا لمعرفة عدد الأفراد الفعلي وحساب استهلاك الطائر الواحد بدقة
+const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / (yieldTotal * 2)).toFixed(0) : 0; 
+let fcrStatus = '';
+
         if(b.birdType === 'quail' || !b.birdType) { if(feedPerBirdGrams < 450) fcrStatus = '<span style="color:var(--success);">ممتاز 🌟</span>'; else if(feedPerBirdGrams <= 550) fcrStatus = '<span style="color:var(--warning);">متوسط ⚠️</span>'; else fcrStatus = '<span style="color:var(--danger);">ضعيف ❌</span>'; } else { fcrStatus = '<span style="color:var(--info);">تم الحساب</span>'; }
 
         let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
