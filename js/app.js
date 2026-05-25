@@ -242,7 +242,23 @@ onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
         const dashTotal = document.getElementById('dashFreezer');
         if(!grid) return;
         
-        grid.innerHTML = ''; let totalCount = 0;
+        // استبدل الجزء ده داخل الـ forEach الخاصة بالرندر:
+grid.innerHTML += `
+    <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
+         style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+        
+        <div style="font-size: 24px; color: var(--primary);">
+            <i class="fas fa-box-open"></i>
+        </div>
+        
+        <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
+        <div style="font-size:28px; font-weight:800; color:var(--primary); margin:0;">${qty}</div>
+        <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px 8px; border-radius: 6px;">
+            ${item.price} ج.م <i class="fas fa-edit" style="margin-right: 5px;"></i>
+        </div>
+    </div>
+`;
+
         
         if(Object.keys(dynamicFreezerConfig).length === 0) {
             grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف لإضافة رويال وجامبو وغيرها.</div>`;
