@@ -590,7 +590,6 @@ window.moveBatchDown = async (id) => {
     }
 };
 
-
 window.promptClassify = (id) => { 
     const classIdEl = document.getElementById('classBatchId');
     if(classIdEl) classIdEl.value = id; 
@@ -627,6 +626,7 @@ window.finishSlaughter = async () => {
     
     if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
 
+    // 🛡️ الحارس المنطقي للتصنيف
     const totalProcessedBirds = yieldPairs * 2;
     if (totalProcessedBirds > aliveBirds) {
         return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
@@ -738,8 +738,6 @@ function formatDateTime(isoString) {
     return `${date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })} (${pad(date.getHours())}:${pad(date.getMinutes())})`;
 }
 
-// ================= 7. رندر الداشبورد والعنابر =================
-// ================= 7. رندر الداشبورد والعنابر =================
 function renderBatches() {
     const ui = { 
         inc: document.getElementById('incubatorList'), 
@@ -916,7 +914,7 @@ function renderBatches() {
                 </div>
             </div></div>`;
         }
-           else if (b.status === 'slaughter') { 
+        else if (b.status === 'slaughter') { 
             ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:10px;">
@@ -939,8 +937,8 @@ function renderBatches() {
             </div>
 
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                <div style="display:flex; gap:8px;">
-                    <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color:var(--danger); font-size:18px;">🗑️</button>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger); background:none; border:none; font-size:18px;">🗑️</button>
                 </div>
                 <div style="display:flex; gap:8px;">
                     <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع ↩️</button>
@@ -948,7 +946,7 @@ function renderBatches() {
                 </div>
             </div></div>`; 
         }
-
+    });
     
     // تجميع الأقسام في واجهة المفرخ
     if(incGroups.quail) ui.inc.innerHTML += `<div class="card-header" style="color:var(--info); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px;"><i class="fas fa-dove"></i> قسم تفريخ السمان</div>` + incGroups.quail;
@@ -962,7 +960,6 @@ function renderBatches() {
     if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
-        
 
 // ================= 8. التقارير والماليات (تم الإصلاح الشامل هنا) =================
 onValue(ref(db, "ledger"), (snapshot) => {
