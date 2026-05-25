@@ -916,23 +916,39 @@ function renderBatches() {
                 </div>
             </div></div>`;
         }
-        else if (b.status === 'slaughter') { 
+                else if (b.status === 'slaughter') { 
             ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
-                <span class="badge" style="background:var(--danger);">قيد الذبح</span>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:24px;">${bIcon}</span>
+                    <div>
+                        <strong style="font-size:18px; color:var(--text-primary); display:block;">${b.name}</strong>
+                        <span style="font-size:12px; color:var(--text-secondary);">${bTypeName}</span>
+                    </div>
+                </div> 
+                <span class="badge" style="background:var(--danger);">قيد الذبح والتجهيز</span>
             </div>
+            
+            <div style="margin: 15px 0; padding: 10px; background: var(--bg-main); border-radius: 8px; font-size: 13px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span>الحالة:</span> <strong style="color:var(--danger);">جاهزة للتصنيف والترحيل</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>الإجمالي للذبح:</span> <strong>${(b.hatchedChicks - b.totalDead) || 0} طائر</strong>
+                </div>
+            </div>
+
             <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                <div style="display:flex; gap:5px;">
-                    <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color:var(--danger); font-size:18px;">🗑️</button>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع</button>
+                    <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع ↩️</button>
                     <button class="btn btn-success" style="margin:0; padding:6px 12px; font-size:13px;" onclick="promptClassify('${id}')">تصنيف للترحيل ❄️</button>
                 </div>
             </div></div>`; 
         }
-    });
+
     
     // تجميع الأقسام في واجهة المفرخ
     if(incGroups.quail) ui.inc.innerHTML += `<div class="card-header" style="color:var(--info); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px;"><i class="fas fa-dove"></i> قسم تفريخ السمان</div>` + incGroups.quail;
