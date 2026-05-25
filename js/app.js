@@ -116,11 +116,27 @@ window.setPrimaryColor = (color, el) => {
 };
 
 // ================= 3. إعدادات الخزنة والمخزن =================
+// ================= مراقبة وتعديل مخزن العلف =================
 onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
     const feedEl = document.getElementById('feedStockDisplay');
-    if(feedEl) feedEl.innerText = currentFeedStock + " كجم";
+    if(feedEl) {
+        // ضفنا هنا الـ onclick والستايل عشان يبان إنه قابل للضغط
+        feedEl.innerHTML = `
+            <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
+                ${currentFeedStock} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
+            </div>`;
+    }
 });
+
+// دالة تعديل الرصيد يدوياً
+window.editFeedStock = () => {
+    const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
+    if(newQty !== null && !isNaN(newQty)) {
+        update(ref(db, "inventory/feedStock"), Number(newQty));
+        showToast("تم تحديث رصيد العلف بنجاح! 👍");
+    }
+};
 
 window.buyFeed = async () => {
     const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
