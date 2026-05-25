@@ -916,8 +916,7 @@ function renderBatches() {
                 </div>
             </div></div>`;
         }
-               
-        else if (b.status === 'slaughter') { 
+           else if (b.status === 'slaughter') { 
             ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:10px;">
