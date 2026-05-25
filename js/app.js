@@ -8,6 +8,10 @@ let manualCash = 0;
 let currentFeedStock = 0; 
 let dynamicFreezerConfig = {}; // العقل المدبر للفريزر
 
+// متغيرات الفلترة والبحث (تم نقلها للمكان الصحيح)
+let currentLedgerFilter = 'all'; 
+let currentLedgerSearch = '';
+
 const birdStandards = {
     quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 35 },
     chicken: { name: 'فراخ بيضاء', icon: '🐔', hatcher: 18, hatch: 21, slaughter: 40 },
@@ -127,41 +131,23 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     }
 });
 
-// التعديل اللحظي لمخزن العلف
 window.editFeedStock = async () => {
     const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
-
     if(newQty !== null && !isNaN(newQty)) {
-
         const val = Number(newQty);
-
         try {
-
-            // ✅ حفظ صحيح في Firebase
             await set(ref(db, "inventory/feedStock"), val);
-
-            // ✅ تحديث فوري
             currentFeedStock = val;
-
             const feedEl = document.getElementById('feedStockDisplay');
-
             if(feedEl) {
                 feedEl.innerHTML = `
-                    <div onclick="editFeedStock()" 
-                         style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
-                        ${val} 
-                        <span style="font-size: 16px;">كجم</span>
-                        <i class="fas fa-edit" 
-                           style="font-size: 14px; color: var(--primary);"></i>
+                    <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
+                        ${val} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
                     </div>`;
             }
-
             showToast("تم تحديث رصيد العلف بنجاح 👍");
-
         } catch(err) {
-
             console.error(err);
-
             showToast("فشل تعديل الرصيد ❌", true);
         }
     }
@@ -226,16 +212,14 @@ window.saveSettings = async () => {
     };
     await set(ref(db, 'settings'), newSet); showToast("تم حفظ إعدادات التشغيل");
 };
-// ================= 4. الفريزر الديناميكي وتحكم الأصناف =================
 
-// 1. مراقبة رصيد الفريزر بشكل لحظي (التحسين الجديد)
+// ================= 4. الفريزر الديناميكي وتحكم الأصناف =================
 let currentFreezerStock = {};
 onValue(ref(db, "inventory/freezerStock"), (snapshot) => {
     currentFreezerStock = snapshot.exists() ? snapshot.val() : {};
     if(typeof window.renderFreezerGrid === 'function') window.renderFreezerGrid();
 });
 
-// 2. مراقبة إعدادات الأصناف والأسعار
 onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
     if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
         const defaultCats = {
@@ -262,7 +246,6 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
     if(typeof window.renderFreezerGrid === 'function') window.renderFreezerGrid();
 });
 
-// 3. دالة رسم مربعات الفريزر
 window.renderFreezerGrid = () => {
     const grid = document.getElementById('freezerGrid');
     const dashTotal = document.getElementById('dashFreezer');
@@ -275,7 +258,7 @@ window.renderFreezerGrid = () => {
     } else {
         Object.keys(dynamicFreezerConfig).forEach(id => {
             const item = dynamicFreezerConfig[id];
-            const qty = currentFreezerStock[id] || 0; // بيقرأ من التحديث اللحظي
+            const qty = currentFreezerStock[id] || 0;
             totalCount += qty;
             
             grid.innerHTML += `
@@ -295,10 +278,6 @@ window.renderFreezerGrid = () => {
     }
     if(dashTotal) dashTotal.innerText = totalCount;
 };
-
-
-    
-            
 
 window.editFreezerItem = (id, currentStock, currentPrice, name) => {
     const newQtyStr = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
@@ -424,15 +403,13 @@ window.saveNewBatch = async () => {
     
     if(!name || !eggs || !datetimeStr || !hatcherD || !hatchD || !rearD) return showToast("أكمل البيانات والتواريخ المتوقعة", true);
 
-    // 💰 1. تحديد السعر المبدئي للبيضة/الكتكوت من الإعدادات
     let unitPrice = 0;
     if(bType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(bType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
     else if(bType === 'turkey') unitPrice = globalSettings.turkeyEgg || 0;
 
-    const initialCost = eggs * unitPrice; // حساب التكلفة الإجمالية
+    const initialCost = eggs * unitPrice;
 
-    // 🐣 2. إنشاء الدفعة الجديدة
     const newBatchRef = push(ref(db, 'batches'));
     await set(newBatchRef, { 
         name, birdType: bType, 
@@ -444,7 +421,6 @@ window.saveNewBatch = async () => {
         order: Date.now()
     });
     
-    // 🧾 3. تسجيل التكلفة المبدئية في الحسابات (إذا كان هناك تكلفة)
     if(initialCost > 0) {
         await push(ref(db, 'ledger'), { 
             type: 'batch_cost', 
@@ -454,14 +430,12 @@ window.saveNewBatch = async () => {
             date: new Date().toISOString().split('T')[0], 
             timestamp: Date.now() 
         });
-        // خصم التكلفة من الخزنة
         await set(ref(db, "cashBox"), manualCash - initialCost);
     }
     
     closeModal('modalBatch'); 
     showToast(`تم التسجيل! التكلفة المبدئية: ${initialCost} ج.م`);
 };
-
 
 window.openEditBatch = (id) => {
     const b = allBatches[id];
@@ -518,15 +492,13 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
-    // 💰 حساب تكلفة الكتاكيت الداخلة للتربية
     let unitPrice = 0;
     if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
-    else if(b.birdType === 'turkey') unitPrice = 0; // الرومي غالباً له إعداد مختلف، ممكن تضبطه
+    else if(b.birdType === 'turkey') unitPrice = 0;
 
     const totalChickCost = healthy * unitPrice;
 
-    // 1. تحديث بيانات الدفعة
     const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
     await update(ref(db, `batches/${id}`), { 
         status: 'rearing', 
@@ -537,7 +509,6 @@ window.moveToRearing = async () => {
         deadInShell: dead 
     });
 
-    // 2. تسجيل تكلفة الكتاكيت في الحسابات (كأنك اشتريتها من المفرخ)
     if(totalChickCost > 0) {
         await push(ref(db, 'ledger'), { 
             type: 'batch_cost', 
@@ -547,18 +518,15 @@ window.moveToRearing = async () => {
             date: new Date().toISOString().split('T')[0], 
             timestamp: Date.now() 
         });
-        // لا نخصم من الكاش هنا لأنها حركة داخلية (من المفرخ للتربية)
     }
     
     closeModal('modalHatch'); 
     showToast(`تم النقل للتربية! تم تحميل ${totalChickCost} ج.م كتكلفة للدفعة.`);
 };
 
-
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
     
-    // 💰 جلب سعر البيع من الإعدادات الديناميكية
     let eggPrice = 0;
     if(batch.birdType === 'quail') eggPrice = globalSettings.quailChick || 0;
     else if(batch.birdType === 'chicken') eggPrice = globalSettings.chickenChick || 0;
@@ -587,7 +555,6 @@ window.sellEggsFromIncubator = async (batchId) => {
         showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م`);
     }
 };
-
 
 window.moveBatchUp = async (id) => {
     const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
@@ -636,7 +603,6 @@ window.finishSlaughter = async () => {
     
     if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
 
-    // 🛡️ الحارس المنطقي للتصنيف
     const totalProcessedBirds = yieldPairs * 2;
     if (totalProcessedBirds > aliveBirds) {
         return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
@@ -824,7 +790,6 @@ function renderBatches() {
                     </div>
                     ${badge}
                 </div>
-                
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                         <span>دخول الماكينة:</span> <strong style="color:var(--text-primary);">${formatDateTime(b.insertDate)}</strong>
@@ -836,7 +801,6 @@ function renderBatches() {
                         <span>موعد الفقس والخروج:</span> <strong style="color:var(--success);">${formatDateTime(b.hatchDate)}</strong>
                     </div>
                 </div>
-
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
                     <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
                     <span>مر ${daysIn} يوم</span>
@@ -868,7 +832,6 @@ function renderBatches() {
                 <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
                 <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span>
             </div>
-            
             <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-top: 10px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                     <span>بداية التربية (الفقس):</span> <strong style="color:var(--text-primary);">${formatDateTime(b.hatchDate)}</strong>
@@ -877,7 +840,6 @@ function renderBatches() {
                     <span>موعد الذبح المتوقع:</span> <strong style="color:var(--danger);">${formatDateTime(b.rearDate)}</strong>
                 </div>
             </div>
-
             <div style="font-size:12px; color:var(--primary); margin-top:10px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div>
             <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;">
                 <div>متبقي: <b style="font-size:18px;">${alive}</b></div>
@@ -922,28 +884,75 @@ function renderBatches() {
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
-// ================= 8. التقارير والماليات =================
+// ================= 8. التقارير والماليات (تم الإصلاح الشامل هنا) =================
 onValue(ref(db, "ledger"), (snapshot) => {
-    allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
-    Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
-        const t = allTransactions[id];
-        if(t.type === 'in') tIn += t.amount; else if(t.type === 'out') tOut += t.amount;
-        let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
-        let sign = t.type === 'in' ? '+' : '-';
-        let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
-        html += `<div class="transaction-item"><div><b>${t.desc} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> <button onclick="deleteTransaction('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br><span style="font-size:12px;color:var(--text-secondary);">${t.date}</span></div><div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount} ج</div></div>`;
+    allTransactions = snapshot.exists() ? snapshot.val() : {}; 
+    let tIn = 0, tOut = 0;
+    
+    Object.values(allTransactions).forEach(t => {
+        if(t.type === 'in') tIn += t.amount; 
+        else if(t.type === 'out') tOut += t.amount;
     });
     
     if(document.getElementById('totalRev')) document.getElementById('totalRev').innerText = tIn; 
     if(document.getElementById('totalExp')) document.getElementById('totalExp').innerText = tOut;
     if(document.getElementById('netProfit')) document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; 
     if(document.getElementById('dashSales')) document.getElementById('dashSales').innerText = tIn;
-    const lList = document.getElementById('ledgerList');
-    if(lList) lList.innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
     
     if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
     updateCashDisplay();
+
+    window.renderTransactionsList();
 });
+
+window.renderTransactionsList = () => {
+    const lList = document.getElementById('ledgerList');
+    if(!lList) return;
+
+    let html = '';
+    
+    let txArray = Object.keys(allTransactions)
+        .map(id => ({ id, ...allTransactions[id] }))
+        .sort((a,b) => b.timestamp - a.timestamp);
+
+    if (currentLedgerSearch.trim() !== '') {
+        txArray = txArray.filter(t => t.desc.toLowerCase().includes(currentLedgerSearch.toLowerCase()));
+    }
+
+    if (currentLedgerFilter !== 'all') {
+        txArray = txArray.filter(t => t.type === currentLedgerFilter);
+    }
+
+    const limit = 50;
+    const totalFound = txArray.length;
+    txArray = txArray.slice(0, limit);
+
+    txArray.forEach(t => {
+        let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
+        let sign = t.type === 'in' ? '+' : '-';
+        let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
+        
+        html += `<div class="transaction-item" style="border-right: 4px solid ${typeColor}; padding-right: 10px;">
+            <div>
+                <b>${t.desc} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> 
+                <button onclick="deleteTransaction('${t.id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br>
+                <span style="font-size:12px;color:var(--text-secondary);">${t.date}</span>
+            </div>
+            <div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount} ج</div>
+        </div>`;
+    });
+    
+    if (totalFound > limit) {
+        html += `<div style="text-align:center; padding: 12px; color: var(--text-secondary); font-size: 13px; background: var(--bg-main); border-radius: 8px; margin-top: 10px;">
+            💡 يتم عرض أحدث 50 حركة من أصل ${totalFound}. استخدم البحث أو التصفية للوصول للحركات الأقدم.
+        </div>`;
+    }
+
+    lList.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--text-secondary);">لا توجد سجلات مطابقة للبحث</div>';
+};
+
+window.filterLedger = (type) => { currentLedgerFilter = type; window.renderTransactionsList(); };
+window.searchLedger = (query) => { currentLedgerSearch = query; window.renderTransactionsList(); };
 
 window.generateBatchReport = () => {
     const id = document.getElementById('reportBatchSelect')?.value;
@@ -958,12 +967,9 @@ window.generateBatchReport = () => {
         const yieldTotal = b.slaughterYield || 0; let potentialRevenue = 0; let outputHtml = '';
         Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (dynamicFreezerConfig[g]?.price || 0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${dynamicFreezerConfig[g]?.name || g}: ${b.classifyData[g]}</span>`; } });
         
-        // تم إزالة الضرب في 2 لأن yieldTotal يمثل عدد الأجواز فعلياً
         const costPerPair = yieldTotal > 0 ? (batchCost / yieldTotal).toFixed(2) : 0; 
         const netProfit = potentialRevenue - batchCost;
-
         const totalFeedKg = b.totalFeed || 0; 
-        // تم ضرب yieldTotal في 2 هنا لمعرفة عدد الأفراد الفعلي وحساب استهلاك الطائر الواحد بدقة
         const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / (yieldTotal * 2)).toFixed(0) : 0; 
         let fcrStatus = '';
 
@@ -971,7 +977,6 @@ window.generateBatchReport = () => {
 
         let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
 
-        // تم إضافة زر الحذف بجوار عنوان الدفعة المكتملة
         container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;">
                 <h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3>
@@ -981,7 +986,6 @@ window.generateBatchReport = () => {
             </div>
             <div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
     } else { 
-        // تم إضافة شكل تحذيري وزر حذف للدفعات الغير مكتملة أو التجريبية
         container.innerHTML = `
         <div style="padding:20px; text-align:center; border: 1px dashed var(--danger); border-radius: 8px; background: rgba(239, 68, 68, 0.05);">
             <div style="color:var(--danger); font-weight:bold; margin-bottom: 15px; font-size:16px;">الدفعة لم تكتمل للبيان الختامي، أو أنها دفعة تجريبية.</div>
@@ -992,7 +996,6 @@ window.generateBatchReport = () => {
     }
     container.style.display = 'block';
 };
-
 
 // ================= 9. المساعد الذكي للتربية (دليل العامل) =================
 function getQuailDailyNeeds(age, aliveCount, system) {
