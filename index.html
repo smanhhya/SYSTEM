@@ -165,6 +165,60 @@
         .color-circle { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 3px solid transparent; }
         .color-circle:hover { transform: scale(1.15); }
         .color-circle.active { border-color: var(--text-primary); transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+ /* ================= شكل الفريزر والأرصدة الجديد ================= */
+
+.grid-3{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:24px;
+}
+
+.stock-card{
+    background:#f5f7fb;
+    border:1px solid #e5e7eb;
+    border-radius:28px;
+    min-height:190px;
+
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+
+    transition:0.25s;
+    cursor:pointer;
+}
+
+.stock-card:hover{
+    transform:translateY(-4px);
+    box-shadow:0 10px 25px rgba(0,0,0,0.06);
+}
+
+.stock-title{
+    font-size:22px;
+    font-weight:700;
+    color:#7b8794;
+    margin-bottom:14px;
+}
+
+.stock-number{
+    font-size:68px;
+    font-weight:800;
+    color:#142c6e;
+    line-height:1;
+}
+
+[data-theme="dark"] .stock-card{
+    background:#1e293b;
+    border-color:#334155;
+}
+
+[data-theme="dark"] .stock-title{
+    color:#94a3b8;
+}
+
+[data-theme="dark"] .stock-number{
+    color:#e2e8f0;
+}
     </style>
 </head>
 <body>
