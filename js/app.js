@@ -116,12 +116,10 @@ window.setPrimaryColor = (color, el) => {
 };
 
 // ================= 3. إعدادات الخزنة والمخزن =================
-// ================= مراقبة وتعديل مخزن العلف =================
 onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
     const feedEl = document.getElementById('feedStockDisplay');
     if(feedEl) {
-        // ضفنا هنا الـ onclick والستايل عشان يبان إنه قابل للضغط
         feedEl.innerHTML = `
             <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
                 ${currentFeedStock} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
@@ -129,22 +127,12 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     }
 });
 
-// دالة تعديل الرصيد يدوياً
 window.editFeedStock = async () => {
-    // 1. طلب القيمة الجديدة من المستخدم
     const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
-    
-    // 2. التأكد إن المستخدم دخل رقم صحيح
     if(newQty !== null && !isNaN(newQty)) {
         const val = Number(newQty);
-        
-        // 3. التحديث المباشر في Firebase
         await update(ref(db, "inventory/feedStock"), val);
-        
-        // 4. تحديث المتغير المحلي فوراً عشان السيستم يحس بالتغيير
         currentFeedStock = val;
-        
-        // 5. تحديث الشاشة فوراً
         const feedEl = document.getElementById('feedStockDisplay');
         if(feedEl) {
             feedEl.innerHTML = `
@@ -152,11 +140,9 @@ window.editFeedStock = async () => {
                     ${val} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
                 </div>`;
         }
-        
         showToast("تم تحديث رصيد العلف بنجاح! 👍");
     }
 };
-
 
 window.buyFeed = async () => {
     const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
@@ -220,11 +206,20 @@ window.saveSettings = async () => {
 
 // ================= 4. الفريزر الديناميكي وتحكم الأصناف الموحد =================
 
-// 1. قراءة الأصناف ورسم الفريزر
-onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
-    dynamicFreezerConfig = snapshot.exists() ? snapshot.val() : {};
+onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
+    if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
+        const defaultCats = {
+            'royal': { name: 'رويال', price: 120 },
+            'jumbo': { name: 'جامبو', price: 90 },
+            'super': { name: 'سوبر', price: 80 }
+        };
+        await set(ref(db, "inventory/freezerConfig"), defaultCats);
+        await set(ref(db, "inventory/freezerStock"), { 'royal':0, 'jumbo':0, 'super':0 });
+        return; 
+    }
+
+    dynamicFreezerConfig = snapshot.val();
     
-    // تحديث قائمة البيع
     const saleSelect = document.getElementById('sGrade');
     if(saleSelect) {
         saleSelect.innerHTML = '<option value="">-- اختر الصنف للبيع --</option>';
@@ -233,7 +228,6 @@ onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
         });
     }
 
-    // تحديث نافذة الإدارة أوتوماتيك لو مفتوحة
     if(typeof window.renderManageCategories === 'function') window.renderManageCategories();
 
     get(ref(db, "inventory/freezerStock")).then(stockSnap => {
@@ -242,55 +236,44 @@ onValue(ref(db, "inventory/freezerConfig"), (snapshot) => {
         const dashTotal = document.getElementById('dashFreezer');
         if(!grid) return;
         
-        // استبدل الجزء ده داخل الـ forEach الخاصة بالرندر:
-grid.innerHTML += `
-    <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
-         style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-        
-        <div style="font-size: 24px; color: var(--primary);">
-            <i class="fas fa-box-open"></i>
-        </div>
-        
-        <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
-        <div style="font-size:28px; font-weight:800; color:var(--primary); margin:0;">${qty}</div>
-        <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px 8px; border-radius: 6px;">
-            ${item.price} ج.م <i class="fas fa-edit" style="margin-right: 5px;"></i>
-        </div>
-    </div>
-`;
-
+        grid.innerHTML = ''; let totalCount = 0;
         
         if(Object.keys(dynamicFreezerConfig).length === 0) {
             grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف لإضافة رويال وجامبو وغيرها.</div>`;
+        } else {
+            Object.keys(dynamicFreezerConfig).forEach(id => {
+                const item = dynamicFreezerConfig[id];
+                const qty = stock[id] || 0;
+                totalCount += qty;
+                
+                grid.innerHTML += `
+                    <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
+                         style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                        
+                        <div style="font-size: 24px; color: var(--primary);">
+                            <i class="fas fa-box-open"></i>
+                        </div>
+                        
+                        <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
+                        <div style="font-size:28px; font-weight:800; color:var(--primary); margin:0;">${qty}</div>
+                        <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px 8px; border-radius: 6px;">
+                            ${item.price} ج.م <i class="fas fa-edit" style="margin-right: 5px;"></i>
+                        </div>
+                    </div>
+                `;
+            });
         }
-
-        Object.keys(dynamicFreezerConfig).forEach(id => {
-            const item = dynamicFreezerConfig[id];
-            const qty = stock[id] || 0;
-            totalCount += qty;
-            
-            grid.innerHTML += `
-                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
-                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0;">
-                    <h4 style="margin:0; color:var(--text-secondary);">${item.name}</h4>
-                    <div style="font-size:28px; font-weight:800; color:var(--primary); margin:10px 0;">${qty}</div>
-                    <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px; border-radius: 6px;">السعر: ${item.price} ج.م <i class="fas fa-edit"></i></div>
-                </div>
-            `;
-        });
         if(dashTotal) dashTotal.innerText = totalCount;
     });
 });
 
-// 2. تعديل الكارت (متأمنة ضد الحذف الخطأ)
 window.editFreezerItem = (id, currentStock, currentPrice, name) => {
     const newQtyStr = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
-    if(newQtyStr === null) return; // لو داس إلغاء
+    if(newQtyStr === null) return; 
     
     const newPriceStr = prompt(`تعديل سعر صنف (${name}) بالجنيه:`, currentPrice);
     if(newPriceStr === null) return; 
 
-    // لو مسح الرقم خالص بيعتبره صفر عشان ميهنجش
     const newQty = parseInt(newQtyStr) || 0;
     const newPrice = parseFloat(newPriceStr) || 0;
 
@@ -299,7 +282,6 @@ window.editFreezerItem = (id, currentStock, currentPrice, name) => {
     showToast("تم التعديل بنجاح 👍");
 };
 
-// 3. إدارة الأصناف (إضافة وحذف)
 window.renderManageCategories = () => {
     const container = document.getElementById('freezerCategoriesList');
     if(!container) return;
@@ -348,7 +330,6 @@ window.deleteFreezerCategory = async (id) => {
     }
 };
 
-// 4. إدارة سجل التخزين والحذف
 let isDeleteLogMode = false;
 window.toggleLogDeletion = () => {
     isDeleteLogMode = !isDeleteLogMode;
@@ -377,11 +358,9 @@ window.renderFreezerLogs = () => {
         const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
         let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:10px;">جديد</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`;
         
-        // 🛡️ التعديل هنا: حارس برمجي لحماية السجل في حالة عدم وجود أصناف بسبب خطأ قديم
         const safeItems = log.items || {};
         let itemsStr = Object.keys(safeItems).filter(k => safeItems[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${safeItems[k]}`).join(' | ');
         
-        // لو السجل كان فاضي يكتب رسالة بدل ما النظام يعطل
         if(!itemsStr) itemsStr = 'لم يتم تحديد أصناف وقت الذبح';
 
         let delBtn = isDeleteLogMode ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 10px; width:auto; margin:0;" onclick="deleteFreezerLog('${key}')">حذف</button>` : '';
@@ -398,8 +377,6 @@ window.renderFreezerLogs = () => {
     
     el.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
 };
-
-
 
 // ================= 5. الدفعات والذبح الديناميكي =================
 window.saveNewBatch = async () => {
@@ -477,7 +454,6 @@ window.moveToRearing = async () => {
     const initialEggs = allBatches[id].initialEggs;
     const totalOut = healthy + unfert + dead;
 
-    // 🛡️ الحارس المنطقي:
     if (totalOut > initialEggs) {
         return showToast(`❌ مستحيل منطقياً! مجموع المخرجات (${totalOut}) أكبر من البيض المدخل للمفرخ (${initialEggs})!`, true);
     }
@@ -557,7 +533,6 @@ window.finishSlaughter = async () => {
     
     if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
 
-    // 🛡️ الحارس المنطقي (كل جوز = 2 طائر):
     const totalProcessedBirds = yieldPairs * 2;
     if (totalProcessedBirds > aliveBirds) {
         return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
@@ -587,7 +562,6 @@ window.saveDailyLog = async () => {
     
     const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
 
-    // 🛡️ الحارس المنطقي للنافق:
     if (dead > aliveBirds) {
         return showToast(`❌ خطأ: المتبقي بالعنبر (${aliveBirds} طائر) وأنت تحاول تسجيل (${dead}) نافق!`, true);
     }
@@ -672,7 +646,6 @@ function formatDateTime(isoString) {
     return `${date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })} (${pad(date.getHours())}:${pad(date.getMinutes())})`;
 }
 
-// دالة العرض بعد إضافة خريطة التواريخ التفصيلية للمفرخ والتربية
 function renderBatches() {
     const ui = { 
         inc: document.getElementById('incubatorList'), 
@@ -846,7 +819,6 @@ function renderBatches() {
     if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
-
 
 // ================= 8. التقارير والماليات =================
 onValue(ref(db, "ledger"), (snapshot) => {
