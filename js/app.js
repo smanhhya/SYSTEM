@@ -715,6 +715,7 @@ function formatDateTime(isoString) {
 }
 
 // ================= 7. رندر الداشبورد والعنابر =================
+// ================= 7. رندر الداشبورد والعنابر =================
 function renderBatches() {
     const ui = { 
         inc: document.getElementById('incubatorList'), 
@@ -734,7 +735,6 @@ function renderBatches() {
     
     let stats = { eggs: 0, chicks: 0 }; const now = new Date();
 
-    // ⏱️ دالة صغيرة لترجمة الساعات إلى (أيام وساعات)
     const formatTimeLeft = (hours) => {
         const absHours = Math.abs(hours);
         const d = Math.floor(absHours / 24);
@@ -747,6 +747,9 @@ function renderBatches() {
     if (currentFeedStock < 50 && ui.alerts) {
         ui.alerts.innerHTML += `<div style="color:var(--danger); font-weight:800; margin-bottom:12px; padding:10px; border:1px dashed var(--danger); border-radius:8px;"><i class="fas fa-triangle-exclamation"></i> تحذير عاجل: العلف بالمخزن أوشك على النفاذ (${currentFeedStock} كجم فقط)!</div>`;
     }
+
+    // مجموعات لفصل المفرخ حسب الطائر
+    let incGroups = { quail: '', chicken: '', turkey: '' };
 
     Object.keys(allBatches).sort((a,b) => (allBatches[b].order || 0) - (allBatches[a].order || 0)).forEach(id => {
         const b = allBatches[id]; const std = birdStandards[b.birdType || 'quail']; const bTypeName = std?.name || 'طائر'; const bIcon = std?.icon || '🐣';
@@ -774,7 +777,7 @@ function renderBatches() {
                     batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
                 } else if(hoursToHatcher <= -24) {
                     actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
-                    ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 تحذير خطير! الدفعة <b>${b.name}</b> تأخرت عن النزول للمفقس بمقدار <b>${formatTimeLeft(hoursToHatcher)}</b>! انقلها فوراً.</div>`; 
+                    ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 تحذير خطير! الدفعة <b>${b.name}</b> تأخرت عن المفقس بمقدار <b>${formatTimeLeft(hoursToHatcher)}</b>!</div>`; 
                     batchAlertHtml = `<div style="background: rgba(220, 38, 38, 0.1); color: var(--danger); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🚨 تأخير خطير في النقل!</div>`;
                 }
             } else {
@@ -787,12 +790,12 @@ function renderBatches() {
                     batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان موعد الفقس!</div>`;
                 } else if(hoursToHatch <= -24) {
                     actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
-                    ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 كارثة محتملة! الدفعة <b>${b.name}</b> موعد فقسها عدى من <b>${formatTimeLeft(hoursToHatch)}</b>! طلّعها فوراً.</div>`; 
+                    ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 كارثة محتملة! الدفعة <b>${b.name}</b> تأخر فقسها <b>${formatTimeLeft(hoursToHatch)}</b>!</div>`; 
                     batchAlertHtml = `<div style="background: rgba(220, 38, 38, 0.1); color: var(--danger); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🚨 تأخير خطير في الفقس!</div>`;
                 }
             }
 
-            ui.inc.innerHTML += `
+            const cardHTML = `
             <div class="batch-card stage-${b.status}">
                 ${batchAlertHtml}
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -805,6 +808,7 @@ function renderBatches() {
                     </div>
                     ${badge}
                 </div>
+                
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                         <span>دخول الماكينة:</span> <strong style="color:var(--text-primary);">${formatDateTime(b.insertDate)}</strong>
@@ -812,10 +816,14 @@ function renderBatches() {
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                         <span>نزول المفقس:</span> <strong style="color:var(--info);">${formatDateTime(b.hatcherDate)}</strong>
                     </div>
-                    <div style="display:flex; justify-content:space-between;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                         <span>موعد الفقس للخروج:</span> <strong style="color:var(--success);">${formatDateTime(b.hatchDate)}</strong>
                     </div>
+                    <div style="display:flex; justify-content:space-between; padding-top:5px; border-top:1px solid var(--border);">
+                        <span>موعد الذبح (المبرمج):</span> <strong style="color:var(--danger);">${formatDateTime(b.rearDate)}</strong>
+                    </div>
                 </div>
+
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
                     <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
                     <span>مر ${daysIn} يوم</span>
@@ -831,18 +839,22 @@ function renderBatches() {
                     <div style="display:flex; gap:5px;">${actionBtn}</div>
                 </div>
             </div>`;
+
+            if(b.birdType === 'quail') incGroups.quail += cardHTML;
+            else if(b.birdType === 'turkey') incGroups.turkey += cardHTML;
+            else incGroups.chicken += cardHTML;
+
         } else if (b.status === 'rearing') {
             const alive = b.hatchedChicks - (b.totalDead||0); stats.chicks += alive; 
             const age = Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1; 
             if(ui.dSelect) ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
             
-            // تنبيهات الذبح بالساعة
             if (hoursToSlaughter > 0 && hoursToSlaughter <= 72) {
                  ui.alerts.innerHTML += `<div style="background: rgba(239, 68, 68, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🔪 الدفعة <b>${b.name}</b> متبقي لها <b>${formatTimeLeft(hoursToSlaughter)}</b> لتكون جاهزة للذبح.</div>`;
             } else if (hoursToSlaughter <= 0 && hoursToSlaughter > -48) {
-                 ui.alerts.innerHTML += `<div style="color:var(--warning); font-weight:bold; margin-bottom:8px;">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح الآن).</div>`;
+                 ui.alerts.innerHTML += `<div style="color:var(--warning); font-weight:bold; margin-bottom:8px;">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
             } else if (hoursToSlaughter <= -48) {
-                 ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 استهلاك زائد! الدفعة <b>${b.name}</b> تخطت موعد الذبح بمقدار <b>${formatTimeLeft(hoursToSlaughter)}</b> (تأكل علفاً من الأرباح)!</div>`;
+                 ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 استهلاك زائد! الدفعة <b>${b.name}</b> تخطت موعد الذبح بمقدار <b>${formatTimeLeft(hoursToSlaughter)}</b>!</div>`;
             }
             
             ui.rear.innerHTML += `<div class="batch-card stage-rearing">
@@ -898,12 +910,18 @@ function renderBatches() {
         }
     });
     
+    // تجميع الأقسام في واجهة المفرخ
+    if(incGroups.quail) ui.inc.innerHTML += `<div class="card-header" style="color:var(--info); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px;"><i class="fas fa-dove"></i> قسم تفريخ السمان</div>` + incGroups.quail;
+    if(incGroups.chicken) ui.inc.innerHTML += `<div class="card-header" style="color:var(--warning); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-kiwi-bird"></i> قسم تفريخ الدواجن</div>` + incGroups.chicken;
+    if(incGroups.turkey) ui.inc.innerHTML += `<div class="card-header" style="color:var(--danger); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-turkey"></i> قسم تفريخ الرومي</div>` + incGroups.turkey;
+    
+    if(ui.inc.innerHTML === '') ui.inc.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد دفعات في المفرخ حالياً.</div>';
+
     if(ui.alerts && ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ المزرعة مستقرة. لا يوجد تنبيهات أو نواقص حالياً.</div>';
     
     if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
-
         
 
 // ================= 8. التقارير والماليات (تم الإصلاح الشامل هنا) =================
