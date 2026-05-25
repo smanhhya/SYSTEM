@@ -6,9 +6,8 @@ let allTransactions = {};
 let allFreezerLogs = {};
 let manualCash = 0; 
 let currentFeedStock = 0; 
-let dynamicFreezerConfig = {}; // العقل المدبر للفريزر
+let dynamicFreezerConfig = {}; 
 
-// متغيرات الفلترة والبحث (تم نقلها للمكان الصحيح)
 let currentLedgerFilter = 'all'; 
 let currentLedgerSearch = '';
 
@@ -403,12 +402,8 @@ window.saveNewBatch = async () => {
     
     if(!name || !eggs || !datetimeStr || !hatcherD || !hatchD || !rearD) return showToast("أكمل البيانات والتواريخ المتوقعة", true);
 
-    let unitPrice = 0;
-    if(bType === 'quail') unitPrice = globalSettings.quailChick || 0;
-    else if(bType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
-    else if(bType === 'turkey') unitPrice = globalSettings.turkeyEgg || 0;
-
-    const initialCost = eggs * unitPrice;
+    // 💡 الإصلاح المحاسبي رقم 1: تم إزالة حساب وحفظ تكلفة البيض هنا لعدم المحاسبة مرتين
+    // البيض يدخل المفرخ كعهدة عينية بدون تكلفة في الدفتر حتى يتحول لكتاكيت أو يُباع.
 
     const newBatchRef = push(ref(db, 'batches'));
     await set(newBatchRef, { 
@@ -421,20 +416,8 @@ window.saveNewBatch = async () => {
         order: Date.now()
     });
     
-    if(initialCost > 0) {
-        await push(ref(db, 'ledger'), { 
-            type: 'batch_cost', 
-            amount: initialCost, 
-            desc: `تكلفة إدخال دفعة (${eggs} بيضة/طائر)`, 
-            batchId: newBatchRef.key, 
-            date: new Date().toISOString().split('T')[0], 
-            timestamp: Date.now() 
-        });
-        await set(ref(db, "cashBox"), manualCash - initialCost);
-    }
-    
     closeModal('modalBatch'); 
-    showToast(`تم التسجيل! التكلفة المبدئية: ${initialCost} ج.م`);
+    showToast(`تم تسجيل الدفعة بنجاح بالمفرخ!`);
 };
 
 window.openEditBatch = (id) => {
@@ -492,10 +475,11 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
+    // 💡 الإصلاح المحاسبي رقم 2: حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
     let unitPrice = 0;
     if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
-    else if(b.birdType === 'turkey') unitPrice = 0;
+    else if(b.birdType === 'turkey') unitPrice = 0; // الرومي حسب الاتفاق أو التعديل
 
     const totalChickCost = healthy * unitPrice;
 
@@ -542,6 +526,7 @@ window.sellEggsFromIncubator = async (batchId) => {
         
         await update(ref(db, `batches/${batchId}`), { initialEggs: batch.initialEggs - sellQty });
         
+        // 💡 الإصلاح المحاسبي رقم 3: البيضة تتباع كإيراد صافي بدون خصم تكلفة سابقة
         await push(ref(db, 'ledger'), { 
             type: 'in', 
             amount: totalAmount, 
@@ -552,7 +537,7 @@ window.sellEggsFromIncubator = async (batchId) => {
         });
         
         await set(ref(db, "cashBox"), manualCash + totalAmount);
-        showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م`);
+        showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م كإيراد`);
     }
 };
 
@@ -724,17 +709,16 @@ window.resetSystem = async () => {
     }
 };
 
-// دالة تصفير الحسابات (أداة التجربة)
+// دالة تصفير الحسابات (أداة التجربة) تعمل بشكل ممتاز
 window.resetFinancials = async () => {
     if(confirm("⚠️ هل أنت متأكد من تصفير دفتر الحسابات بالكامل؟\n(سيتم مسح الإيرادات والمصروفات وتصفير الخزنة)")) {
         if(prompt("اكتب 'تأكيد' لتنفيذ التصفير:") === 'تأكيد') {
-            await remove(ref(db, 'ledger')); // مسح كل حركات الدفتر
-            await set(ref(db, 'cashBox'), 0); // تصفير الكاش الفعلي
+            await remove(ref(db, 'ledger')); 
+            await set(ref(db, 'cashBox'), 0); 
             showToast("تم تصفير الحسابات بنجاح 🧹");
         }
     }
 };
-
 
 // ================= 7. رندر الداشبورد والعنابر =================
 onValue(ref(db, "batches"), (snapshot) => { 
@@ -782,7 +766,6 @@ function renderBatches() {
         ui.alerts.innerHTML += `<div style="color:var(--danger); font-weight:800; margin-bottom:12px; padding:10px; border:1px dashed var(--danger); border-radius:8px;"><i class="fas fa-triangle-exclamation"></i> تحذير عاجل: العلف بالمخزن أوشك على النفاذ (${currentFeedStock} كجم فقط)!</div>`;
     }
 
-    // مجموعات لفصل المفرخ حسب الطائر
     let incGroups = { quail: '', chicken: '', turkey: '' };
 
     Object.keys(allBatches).sort((a,b) => (allBatches[b].order || 0) - (allBatches[a].order || 0)).forEach(id => {
@@ -960,7 +943,6 @@ function renderBatches() {
         }
     });
     
-    // تجميع الأقسام في واجهة المفرخ
     if(incGroups.quail) ui.inc.innerHTML += `<div class="card-header" style="color:var(--info); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px;"><i class="fas fa-dove"></i> قسم تفريخ السمان</div>` + incGroups.quail;
     if(incGroups.chicken) ui.inc.innerHTML += `<div class="card-header" style="color:var(--warning); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-kiwi-bird"></i> قسم تفريخ الدواجن</div>` + incGroups.chicken;
     if(incGroups.turkey) ui.inc.innerHTML += `<div class="card-header" style="color:var(--danger); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-turkey"></i> قسم تفريخ الرومي</div>` + incGroups.turkey;
@@ -973,7 +955,7 @@ function renderBatches() {
     if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
 }
 
-// ================= 8. التقارير والماليات (تم الإصلاح الشامل هنا) =================
+// ================= 8. التقارير والماليات =================
 onValue(ref(db, "ledger"), (snapshot) => {
     allTransactions = snapshot.exists() ? snapshot.val() : {}; 
     let tIn = 0, tOut = 0;
