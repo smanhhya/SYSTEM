@@ -130,18 +130,40 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
 // التعديل اللحظي لمخزن العلف
 window.editFeedStock = async () => {
     const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
+
     if(newQty !== null && !isNaN(newQty)) {
+
         const val = Number(newQty);
-        await update(ref(db, "inventory/feedStock"), val);
-        currentFeedStock = val; // تحديث فوري للمتغير المحلي
-        const feedEl = document.getElementById('feedStockDisplay');
-        if(feedEl) {
-            feedEl.innerHTML = `
-                <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
-                    ${val} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
-                </div>`;
+
+        try {
+
+            // ✅ حفظ صحيح في Firebase
+            await set(ref(db, "inventory/feedStock"), val);
+
+            // ✅ تحديث فوري
+            currentFeedStock = val;
+
+            const feedEl = document.getElementById('feedStockDisplay');
+
+            if(feedEl) {
+                feedEl.innerHTML = `
+                    <div onclick="editFeedStock()" 
+                         style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
+                        ${val} 
+                        <span style="font-size: 16px;">كجم</span>
+                        <i class="fas fa-edit" 
+                           style="font-size: 14px; color: var(--primary);"></i>
+                    </div>`;
+            }
+
+            showToast("تم تحديث رصيد العلف بنجاح 👍");
+
+        } catch(err) {
+
+            console.error(err);
+
+            showToast("فشل تعديل الرصيد ❌", true);
         }
-        showToast("تم تحديث رصيد العلف بنجاح! 👍");
     }
 };
 
