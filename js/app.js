@@ -502,7 +502,6 @@ window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من ا�
 window.promptHatch = (id) => { const el = document.getElementById('hatchBatchId'); if(el) el.value = id; openModal('modalHatch'); };
 
 window.moveToRearing = async () => {
-window.moveToRearing = async () => {
     const id = document.getElementById('hatchBatchId')?.value;
     const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
     const unfert = parseInt(document.getElementById('hUnfert')?.value) || 0;
