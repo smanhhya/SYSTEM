@@ -924,90 +924,26 @@ function renderBatches() {
 
 // ================= 8. التقارير والماليات =================
 onValue(ref(db, "ledger"), (snapshot) => {
-// 1️⃣ ضيف المتغيرين دول في أول ملف الكود خالص (تحت let dynamicFreezerConfig = {};)
-let currentLedgerFilter = 'all'; 
-let currentLedgerSearch = '';
-
-// 2️⃣ ده كود جلب البيانات والحسابات (بديل الكود بتاعك القديم)
-onValue(ref(db, "ledger"), (snapshot) => {
-    allTransactions = snapshot.exists() ? snapshot.val() : {}; 
-    let tIn = 0, tOut = 0;
-    
-    // حساب الإجماليات والماليات بسرعة في الخلفية (عملية طلقة مش بتاخد أجزاء من الملي ثانية)
-    Object.values(allTransactions).forEach(t => {
-        if(t.type === 'in') tIn += t.amount; 
-        else if(t.type === 'out') tOut += t.amount;
+    allTransactions = snapshot.exists() ? snapshot.val() : {}; let tIn = 0, tOut = 0, html = '';
+    Object.keys(allTransactions).sort((a,b)=>allTransactions[b].timestamp-allTransactions[a].timestamp).forEach(id => {
+        const t = allTransactions[id];
+        if(t.type === 'in') tIn += t.amount; else if(t.type === 'out') tOut += t.amount;
+        let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
+        let sign = t.type === 'in' ? '+' : '-';
+        let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
+        html += `<div class="transaction-item"><div><b>${t.desc} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> <button onclick="deleteTransaction('${id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br><span style="font-size:12px;color:var(--text-secondary);">${t.date}</span></div><div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount} ج</div></div>`;
     });
     
     if(document.getElementById('totalRev')) document.getElementById('totalRev').innerText = tIn; 
     if(document.getElementById('totalExp')) document.getElementById('totalExp').innerText = tOut;
     if(document.getElementById('netProfit')) document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; 
     if(document.getElementById('dashSales')) document.getElementById('dashSales').innerText = tIn;
+    const lList = document.getElementById('ledgerList');
+    if(lList) lList.innerHTML = html || '<div style="text-align:center;padding:20px;">لا يوجد سجلات</div>';
     
     if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
     updateCashDisplay();
-
-    // تشغيل دالة الرسم الذكية
-    window.renderTransactionsList();
 });
-
-// 3️⃣ دالة الرسم والفلترة الذكية (تضاف تحت الدالة السابقة)
-window.renderTransactionsList = () => {
-    const lList = document.getElementById('ledgerList');
-    if(!lList) return;
-
-    let html = '';
-    
-    // تحويل الأوبجكت لمصفوفة وترتيبها من الأحدث للأقدم
-    let txArray = Object.keys(allTransactions)
-        .map(id => ({ id, ...allTransactions[id] }))
-        .sort((a,b) => b.timestamp - a.timestamp);
-
-    // [الفلتر الأول] البحث بالاسم أو الوصف
-    if (currentLedgerSearch.trim() !== '') {
-        txArray = txArray.filter(t => t.desc.toLowerCase().includes(currentLedgerSearch.toLowerCase()));
-    }
-
-    // [الفلتر الثاني] التصفية حسب النوع (إيراد / مصروف / سحب عيني)
-    if (currentLedgerFilter !== 'all') {
-        txArray = txArray.filter(t => t.type === currentLedgerFilter);
-    }
-
-    // 🛡️ الحارس الذكي: عرض أول 50 حركة فقط لتسريع التصفح
-    const limit = 50;
-    const totalFound = txArray.length;
-    txArray = txArray.slice(0, limit);
-
-    // بناء الـ HTML للـ 50 حركة المفلوترة بس
-    txArray.forEach(t => {
-        let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
-        let sign = t.type === 'in' ? '+' : '-';
-        let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
-        
-        html += `<div class="transaction-item" style="border-right: 4px solid ${typeColor}; padding-right: 10px;">
-            <div>
-                <b>${t.desc} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> 
-                <button onclick="deleteTransaction('${t.id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br>
-                <span style="font-size:12px;color:var(--text-secondary);">${t.date}</span>
-            </div>
-            <div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount} ج</div>
-        </div>`;
-    });
-    
-    // إشعار المستخدم بوجود معاملات أقدم
-    if (totalFound > limit) {
-        html += `<div style="text-align:center; padding: 12px; color: var(--text-secondary); font-size: 13px; background: var(--bg-main); border-radius: 8px; margin-top: 10px;">
-            💡 يتم عرض أحدث 50 حركة من أصل ${totalFound}. استخدم البحث أو التصفية للوصول للحركات الأقدم.
-        </div>`;
-    }
-
-    lList.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--text-secondary);">لا توجد سجلات مطابقة للبحث</div>';
-};
-
-// 4️⃣ دوال تشغيل الفلاتر عند تغيير الإدخال في الـ HTML
-window.filterLedger = (type) => { currentLedgerFilter = type; window.renderTransactionsList(); };
-window.searchLedger = (query) => { currentLedgerSearch = query; window.renderTransactionsList(); };
-
 
 window.generateBatchReport = () => {
     const id = document.getElementById('reportBatchSelect')?.value;
