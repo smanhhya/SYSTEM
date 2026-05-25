@@ -888,22 +888,40 @@ window.generateBatchReport = () => {
         Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (dynamicFreezerConfig[g]?.price || 0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${dynamicFreezerConfig[g]?.name || g}: ${b.classifyData[g]}</span>`; } });
         
         // تم إزالة الضرب في 2 لأن yieldTotal يمثل عدد الأجواز فعلياً
-const costPerPair = yieldTotal > 0 ? (batchCost / yieldTotal).toFixed(2) : 0; 
-const netProfit = potentialRevenue - batchCost;
+        const costPerPair = yieldTotal > 0 ? (batchCost / yieldTotal).toFixed(2) : 0; 
+        const netProfit = potentialRevenue - batchCost;
 
-const totalFeedKg = b.totalFeed || 0; 
-// تم ضرب yieldTotal في 2 هنا لمعرفة عدد الأفراد الفعلي وحساب استهلاك الطائر الواحد بدقة
-const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / (yieldTotal * 2)).toFixed(0) : 0; 
-let fcrStatus = '';
+        const totalFeedKg = b.totalFeed || 0; 
+        // تم ضرب yieldTotal في 2 هنا لمعرفة عدد الأفراد الفعلي وحساب استهلاك الطائر الواحد بدقة
+        const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / (yieldTotal * 2)).toFixed(0) : 0; 
+        let fcrStatus = '';
 
         if(b.birdType === 'quail' || !b.birdType) { if(feedPerBirdGrams < 450) fcrStatus = '<span style="color:var(--success);">ممتاز 🌟</span>'; else if(feedPerBirdGrams <= 550) fcrStatus = '<span style="color:var(--warning);">متوسط ⚠️</span>'; else fcrStatus = '<span style="color:var(--danger);">ضعيف ❌</span>'; } else { fcrStatus = '<span style="color:var(--info);">تم الحساب</span>'; }
 
         let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
 
-        container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);"><div style="text-align:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;"><h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3></div><div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
-    } else { container.innerHTML = `<div style="padding:15px; text-align:center; color:var(--danger); font-weight:bold;">الدفعة لم تكتمل للبيان الختامي.</div>`; }
+        // تم إضافة زر الحذف بجوار عنوان الدفعة المكتملة
+        container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;">
+                <h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3>
+                <button onclick="deleteBatch('${id}')" title="حذف الدفعة نهائياً" style="background:var(--danger); color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:5px;">
+                    <i class="fas fa-trash"></i> حذف
+                </button>
+            </div>
+            <div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
+    } else { 
+        // تم إضافة شكل تحذيري وزر حذف للدفعات الغير مكتملة أو التجريبية
+        container.innerHTML = `
+        <div style="padding:20px; text-align:center; border: 1px dashed var(--danger); border-radius: 8px; background: rgba(239, 68, 68, 0.05);">
+            <div style="color:var(--danger); font-weight:bold; margin-bottom: 15px; font-size:16px;">الدفعة لم تكتمل للبيان الختامي، أو أنها دفعة تجريبية.</div>
+            <button onclick="deleteBatch('${id}')" style="background:var(--danger); color:white; border:none; border-radius:6px; padding:8px 20px; font-size:14px; cursor:pointer;">
+                <i class="fas fa-trash"></i> مسح الدفعة نهائياً
+            </button>
+        </div>`; 
+    }
     container.style.display = 'block';
 };
+
 
 // ================= 9. المساعد الذكي للتربية (دليل العامل) =================
 function getQuailDailyNeeds(age, aliveCount, system) {
