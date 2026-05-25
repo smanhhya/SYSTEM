@@ -130,13 +130,33 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
 });
 
 // دالة تعديل الرصيد يدوياً
-window.editFeedStock = () => {
+window.editFeedStock = async () => {
+    // 1. طلب القيمة الجديدة من المستخدم
     const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
+    
+    // 2. التأكد إن المستخدم دخل رقم صحيح
     if(newQty !== null && !isNaN(newQty)) {
-        update(ref(db, "inventory/feedStock"), Number(newQty));
+        const val = Number(newQty);
+        
+        // 3. التحديث المباشر في Firebase
+        await update(ref(db, "inventory/feedStock"), val);
+        
+        // 4. تحديث المتغير المحلي فوراً عشان السيستم يحس بالتغيير
+        currentFeedStock = val;
+        
+        // 5. تحديث الشاشة فوراً
+        const feedEl = document.getElementById('feedStockDisplay');
+        if(feedEl) {
+            feedEl.innerHTML = `
+                <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
+                    ${val} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
+                </div>`;
+        }
+        
         showToast("تم تحديث رصيد العلف بنجاح! 👍");
     }
 };
+
 
 window.buyFeed = async () => {
     const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
