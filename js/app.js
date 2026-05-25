@@ -724,6 +724,18 @@ window.resetSystem = async () => {
     }
 };
 
+// دالة تصفير الحسابات (أداة التجربة)
+window.resetFinancials = async () => {
+    if(confirm("⚠️ هل أنت متأكد من تصفير دفتر الحسابات بالكامل؟\n(سيتم مسح الإيرادات والمصروفات وتصفير الخزنة)")) {
+        if(prompt("اكتب 'تأكيد' لتنفيذ التصفير:") === 'تأكيد') {
+            await remove(ref(db, 'ledger')); // مسح كل حركات الدفتر
+            await set(ref(db, 'cashBox'), 0); // تصفير الكاش الفعلي
+            showToast("تم تصفير الحسابات بنجاح 🧹");
+        }
+    }
+};
+
+
 // ================= 7. رندر الداشبورد والعنابر =================
 onValue(ref(db, "batches"), (snapshot) => { 
     allBatches = snapshot.exists() ? snapshot.val() : {}; 
