@@ -424,7 +424,17 @@ window.saveNewBatch = async () => {
     
     if(!name || !eggs || !datetimeStr || !hatcherD || !hatchD || !rearD) return showToast("أكمل البيانات والتواريخ المتوقعة", true);
 
-    await push(ref(db, 'batches'), { 
+    // 💰 1. تحديد السعر المبدئي للبيضة/الكتكوت من الإعدادات
+    let unitPrice = 0;
+    if(bType === 'quail') unitPrice = globalSettings.quailChick || 0;
+    else if(bType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
+    else if(bType === 'turkey') unitPrice = globalSettings.turkeyEgg || 0;
+
+    const initialCost = eggs * unitPrice; // حساب التكلفة الإجمالية
+
+    // 🐣 2. إنشاء الدفعة الجديدة
+    const newBatchRef = push(ref(db, 'batches'));
+    await set(newBatchRef, { 
         name, birdType: bType, 
         insertDate: datetimeStr, 
         hatcherDate: new Date(hatcherD).toISOString(), 
@@ -434,8 +444,24 @@ window.saveNewBatch = async () => {
         order: Date.now()
     });
     
-    closeModal('modalBatch'); showToast(`تم تسجيل الدفعة بدقة`);
+    // 🧾 3. تسجيل التكلفة المبدئية في الحسابات (إذا كان هناك تكلفة)
+    if(initialCost > 0) {
+        await push(ref(db, 'ledger'), { 
+            type: 'batch_cost', 
+            amount: initialCost, 
+            desc: `تكلفة إدخال دفعة (${eggs} بيضة/طائر)`, 
+            batchId: newBatchRef.key, 
+            date: new Date().toISOString().split('T')[0], 
+            timestamp: Date.now() 
+        });
+        // خصم التكلفة من الخزنة
+        await set(ref(db, "cashBox"), manualCash - initialCost);
+    }
+    
+    closeModal('modalBatch'); 
+    showToast(`تم التسجيل! التكلفة المبدئية: ${initialCost} ج.م`);
 };
+
 
 window.openEditBatch = (id) => {
     const b = allBatches[id];
@@ -505,18 +531,37 @@ window.moveToRearing = async () => {
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
-    const eggPrice = batch.birdType === 'turkey' ? (globalSettings.turkeyEgg || 10) : (batch.birdType === 'chicken' ? 15 : 2);
-    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟ (سعر البيضة: ${eggPrice} ج.م)`, "0");
+    
+    // 💰 جلب سعر البيع من الإعدادات الديناميكية
+    let eggPrice = 0;
+    if(batch.birdType === 'quail') eggPrice = globalSettings.quailChick || 0;
+    else if(batch.birdType === 'chicken') eggPrice = globalSettings.chickenChick || 0;
+    else if(batch.birdType === 'turkey') eggPrice = globalSettings.turkeyEgg || 0;
+
+    const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟\n(سعر البيضة المبرمج: ${eggPrice} ج.م)`, "0");
+    
     if(qty && !isNaN(qty) && parseInt(qty) > 0) {
         const sellQty = parseInt(qty);
         if(sellQty > batch.initialEggs) return showToast("العدد أكبر من المتاح!", true);
+        
         const totalAmount = sellQty * eggPrice;
+        
         await update(ref(db, `batches/${batchId}`), { initialEggs: batch.initialEggs - sellQty });
-        await push(ref(db, 'ledger'), { type: 'in', amount: totalAmount, desc: `بيع بيض (${sellQty}) - ${batch.name}`, batchId: batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+        
+        await push(ref(db, 'ledger'), { 
+            type: 'in', 
+            amount: totalAmount, 
+            desc: `بيع بيض (${sellQty}) - ${batch.name}`, 
+            batchId: batchId, 
+            date: new Date().toISOString().split('T')[0], 
+            timestamp: Date.now() 
+        });
+        
         await set(ref(db, "cashBox"), manualCash + totalAmount);
         showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م`);
     }
 };
+
 
 window.moveBatchUp = async (id) => {
     const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
