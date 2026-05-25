@@ -557,15 +557,39 @@ window.sellEggsFromIncubator = async (batchId) => {
 };
 
 window.moveBatchUp = async (id) => {
-    const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const target = allBatches[id];
+    const isInc = (status) => ['incubator', 'hatcher'].includes(status);
+    const isSamePhase = (s1, s2) => (isInc(s1) && isInc(s2)) || s1 === s2;
+    
+    const arr = Object.keys(allBatches)
+        .map(k => ({ id: k, ...allBatches[k] }))
+        .filter(b => b.birdType === target.birdType && isSamePhase(b.status, target.status))
+        .sort((a,b) => (b.order || 0) - (a.order || 0));
+        
     const idx = arr.findIndex(b => b.id === id);
-    if(idx > 0) { await update(ref(db, `batches/${arr[idx - 1].id}`), { order: arr[idx].order }); await update(ref(db, `batches/${id}`), { order: arr[idx - 1].order }); }
+    if(idx > 0) { 
+        await update(ref(db, `batches/${arr[idx - 1].id}`), { order: arr[idx].order }); 
+        await update(ref(db, `batches/${id}`), { order: arr[idx - 1].order }); 
+    }
 };
+
 window.moveBatchDown = async (id) => {
-    const arr = Object.keys(allBatches).map(k => ({ id: k, ...allBatches[k] })).sort((a,b) => (b.order || 0) - (a.order || 0));
+    const target = allBatches[id];
+    const isInc = (status) => ['incubator', 'hatcher'].includes(status);
+    const isSamePhase = (s1, s2) => (isInc(s1) && isInc(s2)) || s1 === s2;
+
+    const arr = Object.keys(allBatches)
+        .map(k => ({ id: k, ...allBatches[k] }))
+        .filter(b => b.birdType === target.birdType && isSamePhase(b.status, target.status))
+        .sort((a,b) => (b.order || 0) - (a.order || 0));
+        
     const idx = arr.findIndex(b => b.id === id);
-    if(idx < arr.length - 1) { await update(ref(db, `batches/${arr[idx + 1].id}`), { order: arr[idx].order }); await update(ref(db, `batches/${id}`), { order: arr[idx + 1].order }); }
+    if(idx < arr.length - 1) { 
+        await update(ref(db, `batches/${arr[idx + 1].id}`), { order: arr[idx].order }); 
+        await update(ref(db, `batches/${id}`), { order: arr[idx + 1].order }); 
+    }
 };
+
 
 window.promptClassify = (id) => { 
     const classIdEl = document.getElementById('classBatchId');
