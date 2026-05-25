@@ -264,53 +264,29 @@
         </div>  
 
         <div id="finance" class="page-view">
-        <div id="finance" class="page-view">
-    <div class="header-title">الماليات والنتائج</div>
+            <div class="header-title">الماليات والنتائج</div>
+            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
+            <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
+          <div style="display: flex; gap: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box;">
     
-    <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);">
-        <div style="text-align: center;">
-            <span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span>
-            <div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div>
-        </div>
-        <div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div>
-            <div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div>
-        </div>
-        <button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')">
-            <i class="fas fa-file-invoice"></i> تسجيل مصروف جديد
-        </button>
-    </div>
-
-    <div class="card">
-        <div class="card-header">بيان ختامي للدفعة (P&L)</div>
-        <select id="reportBatchSelect" onchange="generateBatchReport()">
-            <option value="">-- اختر الدفعة --</option>
-        </select>
-        <div id="batchReportContainer" style="margin-top: 15px; display: none;"></div>
-    </div>
-
-    <div class="card">
-        <div class="card-header">سجل المعاملات</div>
-        
-        <div style="display: flex; gap: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box;">
-            <input type="text" 
-                   placeholder="🔍 ابحث هنا..." 
-                   oninput="searchLedger(this.value)" 
-                   style="flex: 1.7; padding: 8px 10px; font-size: 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0;">
-            
-            <select onchange="filterLedger(this.value)" 
-                    style="flex: 1.3; padding: 8px 5px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; text-align: center;">
-                <option value="all">الكل 📜</option>
-                <option value="in">وارد 🟢</option>
-                <option value="out">مصروف 🔴</option>
-                <option value="batch_cost">سحب عيني 🟡</option>
-            </select>
-        </div>
-
-        <div id="ledgerList"></div>
-    </div>
+    <input type="text" 
+           placeholder="🔍 ابحث هنا..." 
+           onkeyup="searchLedger(this.value)" 
+           style="flex: 1.7; padding: 8px 10px; font-size: 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0;">
+    
+    <select onchange="filterLedger(this.value)" 
+            style="flex: 1.3; padding: 8px 5px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; text-align: center;">
+        <option value="all">الكل 📜</option>
+        <option value="in">وارد 🟢</option>
+        <option value="out">مصروف 🔴</option>
+        <option value="batch_cost">سحب عيني 🟡</option>
+    </select>
+    
 </div>
 
+ 
+            <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
+        </div>
 
         <div id="settingsPage" class="page-view">
             <div class="header-title" style="margin-bottom: 20px;">
