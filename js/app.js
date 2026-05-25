@@ -127,12 +127,13 @@ onValue(ref(db, "inventory/feedStock"), (snapshot) => {
     }
 });
 
+// التعديل اللحظي لمخزن العلف
 window.editFeedStock = async () => {
     const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
     if(newQty !== null && !isNaN(newQty)) {
         const val = Number(newQty);
         await update(ref(db, "inventory/feedStock"), val);
-        currentFeedStock = val;
+        currentFeedStock = val; // تحديث فوري للمتغير المحلي
         const feedEl = document.getElementById('feedStockDisplay');
         if(feedEl) {
             feedEl.innerHTML = `
@@ -204,8 +205,7 @@ window.saveSettings = async () => {
     await set(ref(db, 'settings'), newSet); showToast("تم حفظ إعدادات التشغيل");
 };
 
-// ================= 4. الفريزر الديناميكي وتحكم الأصناف الموحد =================
-
+// ================= 4. الفريزر الديناميكي وتحكم الأصناف =================
 onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
     if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
         const defaultCats = {
@@ -239,21 +239,20 @@ onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
         grid.innerHTML = ''; let totalCount = 0;
         
         if(Object.keys(dynamicFreezerConfig).length === 0) {
-            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف لإضافة رويال وجامبو وغيرها.</div>`;
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف للإضافة.</div>`;
         } else {
             Object.keys(dynamicFreezerConfig).forEach(id => {
                 const item = dynamicFreezerConfig[id];
                 const qty = stock[id] || 0;
                 totalCount += qty;
                 
+                // شكل الفريزر الجديد (المربعات والأيقونات)
                 grid.innerHTML += `
                     <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
                          style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                        
                         <div style="font-size: 24px; color: var(--primary);">
                             <i class="fas fa-box-open"></i>
                         </div>
-                        
                         <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
                         <div style="font-size:28px; font-weight:800; color:var(--primary); margin:0;">${qty}</div>
                         <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px 8px; border-radius: 6px;">
@@ -470,7 +469,6 @@ window.moveToRearing = async () => {
     closeModal('modalHatch'); showToast("تم النقل للتربية بنجاح");
 };
 
-
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
     const eggPrice = batch.birdType === 'turkey' ? (globalSettings.turkeyEgg || 10) : (batch.birdType === 'chicken' ? 15 : 2);
@@ -533,6 +531,7 @@ window.finishSlaughter = async () => {
     
     if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
 
+    // 🛡️ الحارس المنطقي للتصنيف
     const totalProcessedBirds = yieldPairs * 2;
     if (totalProcessedBirds > aliveBirds) {
         return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
@@ -548,7 +547,6 @@ window.finishSlaughter = async () => {
     
     closeModal('modalClassify'); showToast("تم تصنيف الدفعة والترحيل للفريزر ❄️");
 };
-
 
 // ================= 6. المبيعات والمصروفات =================
 window.saveDailyLog = async () => {
@@ -576,7 +574,6 @@ window.saveDailyLog = async () => {
     await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
     closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك");
 };
-
 
 window.calculateSaleTotal = () => {
     const grade = document.getElementById('sGrade')?.value;
