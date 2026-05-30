@@ -1164,3 +1164,6 @@ const renderCmdResults = (query) => {
 document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCommandPalette(); } if (e.key === 'Escape') closeCommandPalette(); });
 document.addEventListener('click', (e) => { if (e.target === document.getElementById('commandPalette')) closeCommandPalette(); });
 document.getElementById('cmdInput')?.addEventListener('input', (e) => renderCmdResults(e.target.value));
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+}
