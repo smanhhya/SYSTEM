@@ -453,13 +453,14 @@
                 <option value="turkey">رومي</option>
             </select>
             
-            <label>اسم الدفعة</label>
-            <input type="text" id="bName">
+            <label>اسم الدفعة (يُكتب تلقائياً بالتاريخ)</label>
+            <input type="text" id="bName" readonly placeholder="اختر تاريخ الدخول لتوليد الاسم تلقائياً" style="background-color: rgba(37, 99, 235, 0.1); border: 1px dashed var(--primary); font-weight: bold; color: var(--primary); pointer-events: none;">
             
             <div class="grid-2">
                 <div><label>البيض الكلي</label><input type="number" id="bEggs"></div>
-                <div><label>تاريخ الدخول</label><input type="datetime-local" id="bDate" onchange="autoCalcDates()"></div>
+                <div><label>تاريخ الدخول</label><input type="datetime-local" id="bDate" onchange="autoCalcDates(); document.getElementById('bName').value = 'دفعة ' + this.value.split('T')[0];"></div>
             </div>
+
             
             <div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--border);">
                 <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">تعديل التواريخ المتوقعة 📅</h4>
@@ -484,8 +485,8 @@
             
             <input type="hidden" id="editBatchId">
             
-            <label>اسم الدفعة</label>
-            <input type="text" id="editBName">
+            <label>اسم الدفعة (يُكتب تلقائياً بالتاريخ)</label>
+            <input type="text" id="editBName" readonly style="background-color: rgba(37, 99, 235, 0.1); border: 1px dashed var(--primary); font-weight: bold; color: var(--primary); pointer-events: none;">
             
             <div class="grid-2">
                 <div>
@@ -494,9 +495,10 @@
                 </div>
                 <div>
                     <label>تاريخ الدخول</label>
-                    <input type="datetime-local" id="editBDate">
+                    <input type="datetime-local" id="editBDate" onchange="document.getElementById('editBName').value = 'دفعة ' + this.value.split('T')[0];">
                 </div>
             </div>
+
             
             <button class="btn btn-info" onclick="saveEditBatch()">حفظ التعديلات</button>
         </div>
