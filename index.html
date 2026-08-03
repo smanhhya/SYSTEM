@@ -171,6 +171,14 @@
         .color-circle { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 3px solid transparent; }
         .color-circle:hover { transform: scale(1.15); }
         .color-circle.active { border-color: var(--text-primary); transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        
+        /* ================= تحسينات إضافية للنظام ================= */
+        .btn-sm { padding: 8px 16px !important; font-size: 13px !important; border-radius: 8px !important; width: auto !important; margin-top: 0 !important; }
+        .input-readonly { background-color: rgba(37, 99, 235, 0.05) !important; border: 1px dashed var(--primary) !important; font-weight: bold !important; color: var(--primary) !important; pointer-events: none; }
+        .search-bar-container { display: flex; gap: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+        .search-input { flex: 1.7; padding: 10px 14px; font-size: 13px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; transition: var(--transition-smooth); }
+        .search-select { flex: 1.3; padding: 10px; font-size: 13px; font-weight: bold; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; text-align: center; cursor: pointer; transition: var(--transition-smooth); }
+        .search-input:focus, .search-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); outline: none; }
     </style>
 </head>
 <body>
@@ -212,7 +220,7 @@
     <div class="main-content">
         
         <div id="dashboard" class="page-view active">
-            <div class="header-title"><span>لوحة القيادة</span><div><button onclick="openModal('modalBatch')" style="background:var(--primary);border:1px solid var(--primary-hover);color:white;font-size:14px; border-radius:8px; padding: 8px 16px; cursor:pointer; font-family:'Cairo'; font-weight:700;"><i class="fas fa-plus"></i> إضافة دفعة</button></div></div>
+            <div class="header-title"><span>لوحة القيادة</span><div><button class="btn btn-primary btn-sm" onclick="openModal('modalBatch')"><i class="fas fa-plus"></i> إضافة دفعة</button></div></div>
             <div class="card"><div class="grid-2"><button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-clipboard-list"></i> علف/نافق</button><button class="btn btn-success" onclick="openModal('modalSale')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button></div></div>
             
             <div class="card">
@@ -273,15 +281,15 @@
             <div class="header-title">     <span>الماليات والنتائج</span>     <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="resetFinancials()">         <i class="fas fa-broom"></i> تصفير الدفتر     </button> </div>
             <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
             <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
-          <div style="display: flex; gap: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box;">
+          <div class="search-bar-container">
     
     <input type="text" 
+           class="search-input"
            placeholder="🔍 ابحث هنا..." 
-           onkeyup="searchLedger(this.value)" 
-           style="flex: 1.7; padding: 8px 10px; font-size: 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0;">
+           onkeyup="searchLedger(this.value)">
     
-    <select onchange="filterLedger(this.value)" 
-            style="flex: 1.3; padding: 8px 5px; font-size: 13px; font-weight: bold; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; text-align: center;">
+    <select class="search-select" 
+            onchange="filterLedger(this.value)">
         <option value="all">الكل 📜</option>
         <option value="in">وارد 🟢</option>
         <option value="out">مصروف 🔴</option>
@@ -454,7 +462,7 @@
             </select>
             
             <label>اسم الدفعة (يُكتب تلقائياً بالتاريخ)</label>
-            <input type="text" id="bName" readonly placeholder="اختر تاريخ الدخول لتوليد الاسم تلقائياً" style="background-color: rgba(37, 99, 235, 0.1); border: 1px dashed var(--primary); font-weight: bold; color: var(--primary); pointer-events: none;">
+            <input type="text" id="bName" readonly placeholder="اختر تاريخ الدخول لتوليد الاسم تلقائياً" class="input-readonly">
             
             <div class="grid-2">
                 <div><label>البيض الكلي</label><input type="number" id="bEggs"></div>
@@ -484,29 +492,73 @@
             <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
             
             <input type="hidden" id="editBatchId">
+            <input type="hidden" id="editBatchStage"> <!-- حقل مخفي لمعرفة مرحلة الدفعة -->
             
-            <label>اسم الدفعة (يُكتب تلقائياً بالتاريخ)</label>
-            <input type="text" id="editBName" readonly style="background-color: rgba(37, 99, 235, 0.1); border: 1px dashed var(--primary); font-weight: bold; color: var(--primary); pointer-events: none;">
+            <label>اسم الدفعة</label>
+            <input type="text" id="editBName" readonly class="input-readonly">
             
             <div class="grid-2">
                 <div>
-                    <label>البيض الكلي</label>
+                    <label>العدد الكلي (بيض/كتاكيت)</label>
                     <input type="number" id="editBEggs">
                 </div>
                 <div>
-                    <label>تاريخ الدخول</label>
-                    <input type="datetime-local" id="editBDate" onchange="document.getElementById('editBName').value = 'دفعة ' + this.value.split('T')[0];">
+                    <label>تاريخ المرحلة</label>
+                    <input type="datetime-local" id="editBDate" onchange="
+                        let isRearing = document.getElementById('editBatchStage').value === 'rearing';
+                        let prefix = isRearing ? 'تربية ' : 'دفعة ';
+                        document.getElementById('editBName').value = prefix + this.value.split('T')[0];
+                    ">
                 </div>
             </div>
 
+            <!-- قسم يظهر فقط إذا كانت الدفعة في مرحلة التربية (سيتم التحكم بظهوره عبر JavaScript) -->
+            <div id="editRearingSection" style="background: rgba(37, 99, 235, 0.05); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--primary); display: none;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">بيانات التربية والذبح 📅</h4>
+                <div class="grid-2">
+                    <div>
+                        <label style="margin-top: 0;">عمر الذبح (أيام)</label>
+                        <input type="number" id="editSlaughterAge">
+                    </div>
+                    <div>
+                        <label style="margin-top: 0;">تاريخ الذبح المتوقع</label>
+                        <input type="datetime-local" id="editSlaughterDate">
+                    </div>
+                </div>
+            </div>
             
-            <button class="btn btn-info" onclick="saveEditBatch()">حفظ التعديلات</button>
+            <button class="btn btn-info" style="margin-top: 25px;" onclick="saveEditBatch()">حفظ التعديلات</button>
         </div>
     </div>
 
     <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
     
-    <div id="modalSale" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3><label>الصنف</label><select id="sGrade" onchange="calculateSaleTotal()"><option value="royal">رويال</option><option value="super_special">سوبر سبشيال</option><option value="special">سبشيال</option><option value="jumbo">جامبو</option><option value="super">سوبر</option><option value="bad">كسر / فرز</option></select><label>العدد (جوز)</label><input type="number" id="sQty" oninput="calculateSaleTotal()"><div style="background:var(--bg-main); padding:15px; border-radius:10px; border:1px solid var(--border); margin-top:15px; text-align:center;"><span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span><div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div></div><button class="btn btn-success" onclick="processSale()">تأكيد البيع</button></div></div>
+    <div id="modalSale" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3>
+            
+            <label>الصنف</label>
+            <select id="sGrade" onchange="calculateSaleTotal()">
+                <option value="royal">رويال</option>
+                <option value="super_special">سوبر سبشيال</option>
+                <option value="special">سبشيال</option>
+                <option value="jumbo">جامبو</option>
+                <option value="super">سوبر</option>
+                <option value="bad">كسر / فرز</option>
+            </select>
+            
+            <label>العدد (جوز)</label>
+            <input type="number" id="sQty" oninput="calculateSaleTotal()">
+            
+            <div style="background:var(--bg-main); padding:15px; border-radius:10px; border:1px solid var(--border); margin-top:15px; text-align:center;">
+                <span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span>
+                <div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div>
+            </div>
+            
+            <button class="btn btn-success" onclick="processSale()">تأكيد البيع</button>
+        </div>
+    </div>
     
     <div id="modalExpense" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف نقدي</h3><label>المبلغ المدفوع (ج.م)</label><input type="number" id="eAmount"><label>بند الصرف (إيجار، عمالة...)</label><input type="text" id="eType"><label>تحميل على الدفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div></div>
     
@@ -517,12 +569,49 @@
             <button class="close-modal" onclick="closeModal('modalHatch')"><i class="fas fa-times"></i></button>
             <h3 style="margin-top: 0; color: var(--primary);">🐣 إتمام الفقس ونقل للتربية</h3>
             <input type="hidden" id="hatchBatchId">
-            <label>كتاكيت سليمة للتربية</label>
-            <input type="number" id="hHealthy" style="font-size: 24px; color: var(--success);">
-            <label style="color: var(--info); margin-top: 15px;">نظام التربية (لحساب المساحة)</label>
-            <select id="hRearingSystem"><option value="floor">تربية أرضية (نشارة)</option><option value="battery">تربية بطاريات (أقفاص)</option></select>
-            <div class="grid-2" style="margin-top: 15px;"><div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div><div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div></div>
-            <button class="btn btn-primary" onclick="moveToRearing()">حساب ونقل للتربية</button>
+            
+            <div class="grid-2">
+                <div>
+                    <label>كتاكيت سليمة للتربية</label>
+                    <input type="number" id="hHealthy" style="font-size: 20px; color: var(--success); font-weight: bold;">
+                </div>
+                <div>
+                    <label style="color: var(--info);">نظام التربية (للمساحة)</label>
+                    <select id="hRearingSystem">
+                        <option value="floor">تربية أرضية (نشارة)</option>
+                        <option value="battery">تربية بطاريات (أقفاص)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid-2" style="margin-top: 15px;">
+                <div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div>
+                <div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div>
+            </div>
+
+            <!-- الإضافات الجديدة: تاريخ التربية والاسم وعمر الذبح -->
+            <div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--border);">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">تحديث بيانات الدورة للتربية 📅</h4>
+                
+                <label style="margin-top: 0;">تاريخ النقل للتربية</label>
+                <input type="datetime-local" id="hRearingDate" onchange="document.getElementById('hNewBatchName').value = 'تربية ' + this.value.split('T')[0];">
+                
+                <label>الاسم الجديد للدفعة</label>
+                <input type="text" id="hNewBatchName" readonly class="input-readonly" placeholder="سيظهر الاسم الجديد هنا تلقائياً">
+                
+                <div class="grid-2">
+                    <div>
+                        <label>عمر الذبح (بالأيام)</label>
+                        <input type="number" id="hSlaughterAge" value="35">
+                    </div>
+                    <div>
+                        <label>تاريخ الذبح المتوقع</label>
+                        <input type="datetime-local" id="hExpectedSlaughterDate">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="moveToRearing()">تأكيد ونقل للتربية</button>
         </div>
     </div>
 
@@ -578,8 +667,158 @@
             updateIcon();
         }
         window.addEventListener('DOMContentLoaded', updateIcon);
+    <script>
+        // ============================================================================
+        // نظام إدارة سمان ههيا الشامل - المنطق البرمجي (JavaScript)
+        // ============================================================================
+
+        // 1. قاعدة بيانات وهمية (مؤقتة) لاختبار النظام
+        let batches = [
+            { id: 1, name: "دفعة 2026-08-01", date: "2026-08-01T10:00", totalCount: 1000, stage: "incubator" },
+            { id: 2, name: "تربية 2026-07-20", date: "2026-07-20T08:00", totalCount: 850, stage: "rearing", slaughterAge: 35, slaughterDate: "2026-08-24T08:00" }
+        ];
+
+        // ================= 2. دوال التنقل وواجهة المستخدم (UI) =================
+
+        // دالة التنقل بين صفحات النظام
+        function switchPage(pageId) {
+            // إخفاء جميع الصفحات
+            document.querySelectorAll('.page-view').forEach(page => page.classList.remove('active'));
+            // إزالة التفعيل من أزرار القوائم
+            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+            
+            // إظهار الصفحة المستهدفة
+            const targetPage = document.getElementById(pageId);
+            if(targetPage) targetPage.classList.add('active');
+            
+            // تفعيل الزر المطابق في القائمة الجانبية والسفلية
+            document.querySelectorAll(`.nav-item[onclick="switchPage('${pageId}')"]`).forEach(nav => nav.classList.add('active'));
+        }
+
+        // دوال فتح وإغلاق النوافذ المنبثقة (Modals)
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(modal) {
+                modal.style.display = 'flex';
+                // إغلاق قائمة الأزرار العائمة إذا كانت مفتوحة
+                const fabMenu = document.getElementById('fabMenu');
+                if(fabMenu && fabMenu.classList.contains('active')) {
+                    fabMenu.classList.remove('active');
+                }
+            }
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if(modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // زر الإجراءات العائمة (FAB - علامة الصاعقة)
+        function toggleFab() {
+            const fabMenu = document.getElementById('fabMenu');
+            if(fabMenu) {
+                fabMenu.classList.toggle('active');
+            }
+        }
+
+        // إغلاق المودال عند الضغط في المساحة الفارغة حوله
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.style.display = "none";
+            }
+        };
+
+        // ================= 3. دوال العمليات الزراعية (التفريخ والتربية) =================
+
+        // دالة حساب التواريخ المتوقعة تلقائياً عند إضافة دفعة للمفرخ
+        function autoCalcDates() {
+            const enterDateInput = document.getElementById('bDate').value;
+            if(!enterDateInput) return;
+
+            const enterDate = new Date(enterDateInput);
+            
+            // حساب تاريخ النزول للمفقس (15 يوم للسمان)
+            const hatcherDate = new Date(enterDate);
+            hatcherDate.setDate(hatcherDate.getDate() + 15);
+            document.getElementById('bHatcherDate').value = hatcherDate.toISOString().slice(0, 16);
+
+            // حساب تاريخ الفقس المتوقع (17 يوم)
+            const hatchDate = new Date(enterDate);
+            hatchDate.setDate(hatchDate.getDate() + 17);
+            document.getElementById('bHatchDate').value = hatchDate.toISOString().slice(0, 16);
+
+            // حساب تاريخ الذبح المتوقع
+            const slaughterDays = parseInt(document.getElementById('bSlaughterDays').value) || 35;
+            const slaughterDate = new Date(hatchDate);
+            slaughterDate.setDate(slaughterDate.getDate() + slaughterDays);
+            document.getElementById('bSlaughterDate').value = slaughterDate.toISOString().slice(0, 16);
+        }
+
+        // الدالة الذكية لفتح نافذة التعديل
+        function openEditModal(batchId) {
+            const batch = batches.find(b => b.id === batchId);
+            
+            if(!batch) {
+                alert('حدث خطأ: لم يتم العثور على الدفعة!');
+                return;
+            }
+
+            document.getElementById('editBatchId').value = batch.id;
+            document.getElementById('editBEggs').value = batch.totalCount;
+            document.getElementById('editBDate').value = batch.date;
+            document.getElementById('editBName').value = batch.name;
+
+            // إظهار حقول التربية إذا كانت الدفعة انتقلت للتربية فعلاً
+            if(batch.stage === 'rearing') {
+                document.getElementById('editBatchStage').value = 'rearing';
+                document.getElementById('editRearingSection').style.display = 'block';
+                
+                document.getElementById('editSlaughterAge').value = batch.slaughterAge || 35;
+                document.getElementById('editSlaughterDate').value = batch.slaughterDate || '';
+            } else {
+                document.getElementById('editBatchStage').value = 'incubator';
+                document.getElementById('editRearingSection').style.display = 'none';
+            }
+
+            openModal('modalEditBatch');
+        }
+
+        // دالة حفظ التعديلات على الدفعة
+        function saveEditBatch() {
+            const id = parseInt(document.getElementById('editBatchId').value);
+            const batchIndex = batches.findIndex(b => b.id === id);
+            
+            if(batchIndex > -1) {
+                batches[batchIndex].totalCount = document.getElementById('editBEggs').value;
+                batches[batchIndex].date = document.getElementById('editBDate').value;
+                batches[batchIndex].name = document.getElementById('editBName').value;
+                
+                if(document.getElementById('editBatchStage').value === 'rearing') {
+                    batches[batchIndex].slaughterAge = document.getElementById('editSlaughterAge').value;
+                    batches[batchIndex].slaughterDate = document.getElementById('editSlaughterDate').value;
+                }
+                
+                console.log("تم تحديث الدفعة بنجاح:", batches[batchIndex]);
+                alert('تم حفظ التعديلات بنجاح!');
+                closeModal('modalEditBatch');
+            }
+        }
+
+        // ================= 4. دوال إضافية =================
+        function saveNewBatch() {
+            alert("تم ضغط زر إضافة دفعة. سيتم برمجة الحفظ لاحقاً.");
+            closeModal('modalBatch');
+        }
+
+        function moveToRearing() {
+            alert("تم ضغط زر النقل للتربية. سيتم برمجة تحديث الحالة لاحقاً.");
+            closeModal('modalHatch');
+        }
     </script>
-    <script type="module" src="./js/app.js"></script>
+
+    </script>
     
     <div id="modalDailyGuide" class="modal-overlay">
         <div class="modal-content">
