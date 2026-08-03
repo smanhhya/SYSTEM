@@ -440,11 +440,31 @@ window.saveEditBatch = async () => {
 
     const std = birdStandards[b.birdType || 'quail'];
     const insertD = new Date(newDateStr);
-    const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-    const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-    const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+    
+    // 1. تجهيز حزمة البيانات الأساسية
+    let updateData = { name: newName, initialEggs: newEggs, insertDate: newDateStr };
 
-    await update(ref(db, `batches/${id}`), { name: newName, initialEggs: newEggs, insertDate: newDateStr, hatcherDate: hatcherD.toISOString(), hatchDate: hatchD.toISOString(), rearDate: rearD.toISOString() });
+    // 2. فحص حالة الدفعة لتحديث التواريخ بشكل ذكي
+    if (b.status === 'incubator' || b.status === 'hatcher') {
+        // لو في المفرخ: التواريخ تمشي حسب الـ Standard
+        const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+        const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+        const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+        
+        updateData.hatcherDate = hatcherD.toISOString();
+        updateData.hatchDate = hatchD.toISOString();
+        updateData.rearDate = rearD.toISOString();
+    } 
+    else if (b.status === 'rearing') {
+        // لو في التربية: نأخذ التعديل اليدوي لعمر الذبح وتاريخه
+        const customSlaughterAge = parseInt(document.getElementById('editSlaughterAge')?.value);
+        const customSlaughterDate = document.getElementById('editSlaughterDate')?.value;
+        
+        if(customSlaughterAge) updateData.slaughterAge = customSlaughterAge;
+        if(customSlaughterDate) updateData.rearDate = new Date(customSlaughterDate).toISOString();
+    }
+
+    await update(ref(db, `batches/${id}`), updateData);
     closeModal('modalEditBatch'); showToast("تم تحديث الدفعة");
 };
 
@@ -465,6 +485,11 @@ window.moveToRearing = async () => {
     const dead = parseInt(document.getElementById('hDead')?.value) || 0;
     const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
     
+    // التقاط البيانات الجديدة الخاصة بالتربية (الاسم وعمر الذبح)
+    const newName = document.getElementById('hNewBatchName')?.value;
+    const slaughterAge = parseInt(document.getElementById('hSlaughterAge')?.value) || 35;
+    const expectedSlaughterDate = document.getElementById('hExpectedSlaughterDate')?.value;
+    
     if(!id || healthy < 0) return showToast("أدخل أرقاماً صحيحة", true);
     
     const b = allBatches[id];
@@ -475,23 +500,31 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
-    // 💡 الإصلاح المحاسبي رقم 2: حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
+    // الإصلاح المحاسبي رقم 2: حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
     let unitPrice = 0;
     if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
     else if(b.birdType === 'turkey') unitPrice = 0; // الرومي حسب الاتفاق أو التعديل
 
     const totalChickCost = healthy * unitPrice;
-
     const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
-    await update(ref(db, `batches/${id}`), { 
+    
+    // دمج البيانات الجديدة مع البيانات الأساسية للترحيل
+    let updateData = { 
         status: 'rearing', 
         hatchedChicks: healthy, 
         hatchRate: hatchRate, 
         rearingSystem: rearingSys, 
         unfertilized: unfert, 
-        deadInShell: dead 
-    });
+        deadInShell: dead,
+        slaughterAge: slaughterAge 
+    };
+    
+    // تحديث الاسم وتاريخ الذبح لو تم إدخالهم
+    if(newName) updateData.name = newName;
+    if(expectedSlaughterDate) updateData.rearDate = new Date(expectedSlaughterDate).toISOString();
+
+    await update(ref(db, `batches/${id}`), updateData);
 
     if(totalChickCost > 0) {
         await push(ref(db, 'ledger'), { 
@@ -507,6 +540,7 @@ window.moveToRearing = async () => {
     closeModal('modalHatch'); 
     showToast(`تم النقل للتربية! تم تحميل ${totalChickCost} ج.م كتكلفة للدفعة.`);
 };
+
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
