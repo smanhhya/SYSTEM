@@ -476,7 +476,54 @@ window.updateStage = async (id, stage) => {
 
 window.deleteBatch = async (id) => { if(confirm("هل أنت متأكد من الحذف؟")) { await remove(ref(db, `batches/${id}`)); showToast("تم الحذف"); } };
 
-window.promptHatch = (id) => { const el = document.getElementById('hatchBatchId'); if(el) el.value = id; openModal('modalHatch'); };
+window.promptHatch = (id) => { 
+    const el = document.getElementById('hatchBatchId'); 
+    if(el) el.value = id; 
+    
+    // سحب بيانات الدفعة من قاعدة البيانات
+    const b = allBatches[id];
+    
+    if (b && b.hatchDate) {
+        // 1. استدعاء تاريخ الفقس الأصلي (حتى لو قمت بالتسجيل بعد عدة أيام)
+        const hatchDateObj = new Date(b.hatchDate);
+        const dateOnly = hatchDateObj.toISOString().split('T')[0];
+
+        // 2. توليد الاسم الجديد للدفعة تلقائياً
+        const nameInput = document.getElementById('hNewBatchName');
+        if(nameInput) {
+            nameInput.value = 'تربية ' + dateOnly;
+        }
+
+        // 3. حساب تاريخ الذبح تلقائياً بناءً على تاريخ الفقس وليس اليوم
+        const slaughterAge = 35; // عمر الذبح الافتراضي للسمان
+        const slaughterDateObj = new Date(hatchDateObj);
+        slaughterDateObj.setDate(slaughterDateObj.getDate() + slaughterAge);
+
+        // دالة صغيرة لتنسيق التاريخ ليناسب حقول الإدخال
+        const formatForInput = (d) => {
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+
+        // تعبئة حقول الذبح
+        const slaughterInput = document.getElementById('hExpectedSlaughterDate');
+        if(slaughterInput) slaughterInput.value = formatForInput(slaughterDateObj);
+
+        const ageInput = document.getElementById('hSlaughterAge');
+        if(ageInput) ageInput.value = slaughterAge;
+
+        // 4. تعبئة حقل "تاريخ النقل" وقفله تماماً (Read-Only) لكي لا تتحكم به يدوياً
+        const rearingDateInput = document.getElementById('hRearingDate');
+        if(rearingDateInput) {
+            rearingDateInput.value = formatForInput(hatchDateObj);
+            rearingDateInput.setAttribute('readonly', 'true');
+            rearingDateInput.style.pointerEvents = 'none'; // منع الضغط عليه
+            rearingDateInput.style.opacity = '0.6'; // إعطاء شكل باهت ليوضح أنه تلقائي
+        }
+    }
+    
+    openModal('modalHatch'); 
+};
 
 window.moveToRearing = async () => {
     const id = document.getElementById('hatchBatchId')?.value;
