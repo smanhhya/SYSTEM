@@ -1,5 +1,22 @@
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
+// استدعاء أدوات Firestore لكي تتمكن المزرعة من التحدث مع الـ CRM
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// إعدادات قاعدة بيانات الـ CRM (المبيعات)
+const crmFirebaseConfig = { 
+    apiKey: "AIzaSyD7ZJP8n8fhMewPfEsTBANn0h9To_q15BY", 
+    authDomain: "sman-ca8f8.firebaseapp.com", 
+    projectId: "sman-ca8f8", 
+    storageBucket: "sman-ca8f8.firebasestorage.app", 
+    messagingSenderId: "538778803310", 
+    appId: "1:538778803310:web:5eeff42bae534375a21a7f" 
+};
+
+// تهيئة الـ CRM كتطبيق ثانوي داخل نظام المزرعة لعدم التعارض
+const crmApp = initializeApp(crmFirebaseConfig, "CRM_System");
+const crmDb = getFirestore(crmApp);
 
 let allBatches = {};
 let allTransactions = {};
@@ -542,41 +559,45 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
-    // ================= الأتمتة الذكية للأسماء والتواريخ =================
-    // 1. استخراج تاريخ خروج الدفعة من المكنة (المفرخ)
+    // ================= 1. الأتمتة: حساب الاسم الجديد وتاريخ الذبح =================
     const hatchDateObj = new Date(b.hatchDate);
-    const exitDateOnly = hatchDateObj.toISOString().split('T')[0];
-
-    // 2. توليد الاسم الجديد تلقائياً بتاريخ الخروج الفعلي
-    const autoNewName = 'تربية ' + exitDateOnly;
-
-    // 3. حساب موعد الذبح تلقائياً وإضافته لتاريخ الخروج
     const std = birdStandards[b.birdType || 'quail'];
-    const autoSlaughterAge = std ? std.slaughter : 35; // 35 يوم للسمان كافتراضي
+    const autoSlaughterAge = std ? std.slaughter : 35; 
+    
     const autoSlaughterDateObj = new Date(hatchDateObj);
     autoSlaughterDateObj.setDate(autoSlaughterDateObj.getDate() + autoSlaughterAge);
-    // =====================================================================
 
-    // حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
+    // استخراج اليوم والشهر لعمل الاسم (مثال: دفعة 10/9)
+    const slaughterDay = autoSlaughterDateObj.getDate();
+    const slaughterMonth = autoSlaughterDateObj.getMonth() + 1;
+    const autoNewName = `دفعة ${slaughterDay}/${slaughterMonth}`;
+
+    // ================= 2. حساب الأجواز الصافية للمبيعات =================
+    // خصم 50 كـ هالك، ثم القسمة على 2
+    let expectedPairs = Math.floor((healthy - 50) / 2);
+    if (expectedPairs < 0) expectedPairs = 0;
+
+    // ================= 3. التحديث في نظام المزرعة الداخلي =================
     let unitPrice = 0;
     if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
-    else if(b.birdType === 'turkey') unitPrice = 0; // الرومي حسب الاتفاق أو التعديل
+    else if(b.birdType === 'turkey') unitPrice = 0;
 
     const totalChickCost = healthy * unitPrice;
     const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
     
-    // إرسال البيانات المحدثة لقاعدة البيانات شاملة الاسم وتاريخ الذبح الجديد
+    // تسجيل العملية في داتابيز المزرعة
     await update(ref(db, `batches/${id}`), { 
-        name: autoNewName,                           // تحديث الاسم تلقائياً
-        rearDate: autoSlaughterDateObj.toISOString(),// تحديث موعد الذبح تلقائياً
-        slaughterAge: autoSlaughterAge,              // حفظ عمر الذبح
+        name: autoNewName,                           
+        rearDate: autoSlaughterDateObj.toISOString(),
+        slaughterAge: autoSlaughterAge,              
         status: 'rearing', 
         hatchedChicks: healthy, 
         hatchRate: hatchRate, 
         rearingSystem: rearingSys, 
         unfertilized: unfert, 
-        deadInShell: dead 
+        deadInShell: dead,
+        crmExpectedPairs: expectedPairs // حفظ العدد المتوقع في المزرعة للرجوع إليه
     });
 
     if(totalChickCost > 0) {
@@ -589,12 +610,31 @@ window.moveToRearing = async () => {
             timestamp: Date.now() 
         });
     }
-    
+
+    // ================= 4. السحر: الترحيل الآلي لـ CRM =================
+    try {
+        // نستخدم crmDb (قاعدة بيانات المبيعات) لفتح باب الحجز فوراً
+        const batchDocRef = doc(crmDb, "inventory", "batches");
+        await setDoc(batchDocRef, {
+            [id]: {
+                name: autoNewName,
+                isOpen: true,
+                isVisible: true,
+                expectedPairs: expectedPairs, // الأجواز المتوقعة بناءً على معادلتك
+                stock: {},
+                booked: {}
+            }
+        }, { merge: true });
+        
+        console.log("تم ترحيل الدفعة لنظام المبيعات بنجاح.");
+    } catch (err) {
+        console.error("فشل الترحيل لـ CRM:", err);
+        alert("حدث خطأ أثناء إرسال الدفعة للـ CRM، يرجى التأكد من اتصال الإنترنت.");
+    }
+
     closeModal('modalHatch'); 
-    showToast(`تم النقل للتربية وتغيير اسم الدفعة إلى: ${autoNewName}`);
+    showToast(`تم النقل للتربية باسم (${autoNewName}) وترحيل ${expectedPairs} جوز للـ CRM بنجاح! 🚀`);
 };
-
-
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
