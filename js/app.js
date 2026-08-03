@@ -532,11 +532,6 @@ window.moveToRearing = async () => {
     const dead = parseInt(document.getElementById('hDead')?.value) || 0;
     const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
     
-    // التقاط البيانات الجديدة الخاصة بالتربية (الاسم وعمر الذبح)
-    const newName = document.getElementById('hNewBatchName')?.value;
-    const slaughterAge = parseInt(document.getElementById('hSlaughterAge')?.value) || 35;
-    const expectedSlaughterDate = document.getElementById('hExpectedSlaughterDate')?.value;
-    
     if(!id || healthy < 0) return showToast("أدخل أرقاماً صحيحة", true);
     
     const b = allBatches[id];
@@ -547,7 +542,22 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
-    // الإصلاح المحاسبي رقم 2: حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
+    // ================= الأتمتة الذكية للأسماء والتواريخ =================
+    // 1. استخراج تاريخ خروج الدفعة من المكنة (المفرخ)
+    const hatchDateObj = new Date(b.hatchDate);
+    const exitDateOnly = hatchDateObj.toISOString().split('T')[0];
+
+    // 2. توليد الاسم الجديد تلقائياً بتاريخ الخروج الفعلي
+    const autoNewName = 'تربية ' + exitDateOnly;
+
+    // 3. حساب موعد الذبح تلقائياً وإضافته لتاريخ الخروج
+    const std = birdStandards[b.birdType || 'quail'];
+    const autoSlaughterAge = std ? std.slaughter : 35; // 35 يوم للسمان كافتراضي
+    const autoSlaughterDateObj = new Date(hatchDateObj);
+    autoSlaughterDateObj.setDate(autoSlaughterDateObj.getDate() + autoSlaughterAge);
+    // =====================================================================
+
+    // حساب تكلفة الكتاكيت فقط (قسم التربية يحاسب قسم التفريخ)
     let unitPrice = 0;
     if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
     else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
@@ -556,22 +566,18 @@ window.moveToRearing = async () => {
     const totalChickCost = healthy * unitPrice;
     const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
     
-    // دمج البيانات الجديدة مع البيانات الأساسية للترحيل
-    let updateData = { 
+    // إرسال البيانات المحدثة لقاعدة البيانات شاملة الاسم وتاريخ الذبح الجديد
+    await update(ref(db, `batches/${id}`), { 
+        name: autoNewName,                           // تحديث الاسم تلقائياً
+        rearDate: autoSlaughterDateObj.toISOString(),// تحديث موعد الذبح تلقائياً
+        slaughterAge: autoSlaughterAge,              // حفظ عمر الذبح
         status: 'rearing', 
         hatchedChicks: healthy, 
         hatchRate: hatchRate, 
         rearingSystem: rearingSys, 
         unfertilized: unfert, 
-        deadInShell: dead,
-        slaughterAge: slaughterAge 
-    };
-    
-    // تحديث الاسم وتاريخ الذبح لو تم إدخالهم
-    if(newName) updateData.name = newName;
-    if(expectedSlaughterDate) updateData.rearDate = new Date(expectedSlaughterDate).toISOString();
-
-    await update(ref(db, `batches/${id}`), updateData);
+        deadInShell: dead 
+    });
 
     if(totalChickCost > 0) {
         await push(ref(db, 'ledger'), { 
@@ -585,8 +591,9 @@ window.moveToRearing = async () => {
     }
     
     closeModal('modalHatch'); 
-    showToast(`تم النقل للتربية! تم تحميل ${totalChickCost} ج.م كتكلفة للدفعة.`);
+    showToast(`تم النقل للتربية وتغيير اسم الدفعة إلى: ${autoNewName}`);
 };
+
 
 
 window.sellEggsFromIncubator = async (batchId) => {
