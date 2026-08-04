@@ -637,6 +637,56 @@ window.moveToRearing = async () => {
     showToast(`تم النقل للتربية باسم (${autoNewName}) وترحيل ${expectedPairs} جوز للـ CRM بنجاح! 🚀`);
 };
 
+window.syncLegacyBatchesToCRM = async () => {
+    if (!allBatches || Object.keys(allBatches).length === 0) {
+        alert("لا توجد دفعات في المزرعة لمزامنتها.");
+        return;
+    }
+
+    let syncedCount = 0;
+    let crmUpdates = {};
+
+    for (const [id, b] of Object.entries(allBatches)) {
+        // هنسحب الدفعات اللي في التربية بس
+        if (b.status === 'rearing') {
+            let healthy = b.hatchedChicks || 0;
+            let expectedPairs = Math.floor((healthy - 50) / 2);
+            if (expectedPairs < 0) expectedPairs = 0;
+
+            const hatchDateObj = b.hatchDate ? new Date(b.hatchDate) : new Date();
+            const std = birdStandards[b.birdType || 'quail'];
+            const autoSlaughterAge = std ? std.slaughter : 35;
+            const safeSlaughterAgeForCustomer = autoSlaughterAge + 5; // هامش الأمان
+
+            crmUpdates[id] = {
+                name: b.name,
+                isOpen: true,
+                isVisible: true,
+                expectedPairs: expectedPairs,
+                hatchDate: hatchDateObj.getTime(),
+                slaughterAge: safeSlaughterAgeForCustomer,
+                stock: {},
+                booked: {}
+            };
+            syncedCount++;
+        }
+    }
+
+    if (syncedCount === 0) {
+        alert("لا توجد دفعات في مرحلة التربية تحتاج للمزامنة.");
+        return;
+    }
+
+    if (!confirm(`تم العثور على (${syncedCount}) دفعة في التربية.\nهل تريد ترحيلهم الآن إلى الـ CRM؟`)) return;
+
+    try {
+        const batchDocRef = doc(crmDb, "inventory", "batches");
+        await setDoc(batchDocRef, crmUpdates, { merge: true });
+        alert(`✅ تمت المزامنة بنجاح! تم ترحيل ${syncedCount} دفعة لسيستم المبيعات.`);
+    } catch (error) {
+        alert("حدث خطأ أثناء المزامنة. يرجى التأكد من الإنترنت.");
+    }
+};
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
