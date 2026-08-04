@@ -559,7 +559,7 @@ window.moveToRearing = async () => {
         return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
     }
 
-    // ================= 1. الأتمتة: حساب الاسم الجديد وتاريخ الذبح =================
+    // ================= 1. الأتمتة: حساب الاسم وتاريخ الذبح =================
     const hatchDateObj = new Date(b.hatchDate);
     const std = birdStandards[b.birdType || 'quail'];
     const autoSlaughterAge = std ? std.slaughter : 35; 
@@ -567,15 +567,16 @@ window.moveToRearing = async () => {
     const autoSlaughterDateObj = new Date(hatchDateObj);
     autoSlaughterDateObj.setDate(autoSlaughterDateObj.getDate() + autoSlaughterAge);
 
-    // استخراج اليوم والشهر لعمل الاسم (مثال: دفعة 10/9)
     const slaughterDay = autoSlaughterDateObj.getDate();
     const slaughterMonth = autoSlaughterDateObj.getMonth() + 1;
     const autoNewName = `دفعة ${slaughterDay}/${slaughterMonth}`;
 
-    // ================= 2. حساب الأجواز الصافية للمبيعات =================
-    // خصم 50 كـ هالك، ثم القسمة على 2
+    // ================= 2. حساب الأجواز الصافية وهامش الأمان للعميل =================
     let expectedPairs = Math.floor((healthy - 50) / 2);
     if (expectedPairs < 0) expectedPairs = 0;
+
+    // إضافة الـ 5 أيام أمان لعمر الذبح اللي هيظهر للعميل
+    const safeSlaughterAgeForCustomer = autoSlaughterAge + 5;
 
     // ================= 3. التحديث في نظام المزرعة الداخلي =================
     let unitPrice = 0;
@@ -586,7 +587,6 @@ window.moveToRearing = async () => {
     const totalChickCost = healthy * unitPrice;
     const hatchRate = ((healthy / initialEggs) * 100).toFixed(1);
     
-    // تسجيل العملية في داتابيز المزرعة
     await update(ref(db, `batches/${id}`), { 
         name: autoNewName,                           
         rearDate: autoSlaughterDateObj.toISOString(),
@@ -597,7 +597,7 @@ window.moveToRearing = async () => {
         rearingSystem: rearingSys, 
         unfertilized: unfert, 
         deadInShell: dead,
-        crmExpectedPairs: expectedPairs // حفظ العدد المتوقع في المزرعة للرجوع إليه
+        crmExpectedPairs: expectedPairs 
     });
 
     if(totalChickCost > 0) {
@@ -611,22 +611,23 @@ window.moveToRearing = async () => {
         });
     }
 
-    // ================= 4. السحر: الترحيل الآلي لـ CRM =================
+    // ================= 4. السحر: الترحيل الآلي لـ CRM ببيانات العرض =================
     try {
-        // نستخدم crmDb (قاعدة بيانات المبيعات) لفتح باب الحجز فوراً
         const batchDocRef = doc(crmDb, "inventory", "batches");
         await setDoc(batchDocRef, {
             [id]: {
                 name: autoNewName,
                 isOpen: true,
                 isVisible: true,
-                expectedPairs: expectedPairs, // الأجواز المتوقعة بناءً على معادلتك
+                expectedPairs: expectedPairs,
+                hatchDate: hatchDateObj.getTime(), // إرسال تاريخ الفقس (عشان الـ CRM يحسب العمر كل يوم لوحده)
+                slaughterAge: safeSlaughterAgeForCustomer, // إرسال العمر + 5 أيام أمان للزبون
                 stock: {},
                 booked: {}
             }
         }, { merge: true });
         
-        console.log("تم ترحيل الدفعة لنظام المبيعات بنجاح.");
+        console.log("تم ترحيل الدفعة وإعدادات العرض لنظام المبيعات بنجاح.");
     } catch (err) {
         console.error("فشل الترحيل لـ CRM:", err);
         alert("حدث خطأ أثناء إرسال الدفعة للـ CRM، يرجى التأكد من اتصال الإنترنت.");
@@ -635,6 +636,7 @@ window.moveToRearing = async () => {
     closeModal('modalHatch'); 
     showToast(`تم النقل للتربية باسم (${autoNewName}) وترحيل ${expectedPairs} جوز للـ CRM بنجاح! 🚀`);
 };
+
 
 window.sellEggsFromIncubator = async (batchId) => {
     const batch = allBatches[batchId];
