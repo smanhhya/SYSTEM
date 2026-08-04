@@ -1347,3 +1347,9 @@ document.getElementById('cmdInput')?.addEventListener('input', (e) => renderCmdR
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js');
 }
+// مفتاح التشغيل التلقائي للمزامنة (يشتغل بعد 4 ثواني من فتح الصفحة)
+setTimeout(() => {
+    if (typeof window.syncLegacyBatchesToCRM === 'function') {
+        window.syncLegacyBatchesToCRM();
+    }
+}, 4000);
