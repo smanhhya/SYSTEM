@@ -1497,9 +1497,3 @@ onValue(ref(db, "breedersLogs"), (snapshot) => {
 document.getElementById('setIncShelves')?.addEventListener('input', window.calcBreederStats);
 document.getElementById('setIncShelfCapacity')?.addEventListener('input', window.calcBreederStats);
 
-// مفتاح التشغيل التلقائي للمزامنة (يشتغل بعد 4 ثواني من فتح الصفحة)
-setTimeout(() => {
-    if (typeof window.syncLegacyBatchesToCRM === 'function') {
-        window.syncLegacyBatchesToCRM();
-    }
-}, 4000);
