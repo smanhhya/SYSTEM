@@ -1349,19 +1349,36 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js');
 }
 
-// ================= 12. نظام الإدارة الذكي (الأمهات ومكنة PTO C 10) =================
+// ================= 12. نظام الإدارة الذكي (الأمهات ومكنة PTO C 12) =================
 
 let activeFlockCount = 0;
+let flockEntryDate = '';
+let currentFlockAgeWeeks = 0;
 let accumulatedGoodEggs = 0;
-// إعدادات المكنة الافتراضية (10 أرفف، كل رف 500 بيضة مثلاً - قابلة للتغيير من الإعدادات)
-let ptoSettings = { shelves: 10, capacityPerShelf: 500 }; 
+// المكنة أصبحت 12 رف بشكل افتراضي
+let ptoSettings = { shelves: 12, capacityPerShelf: 500 }; 
 let incubatorShelves = {};
 
-// 1. الاستماع لرصيد الأمهات والبيض المتراكم
-onValue(ref(db, "inventory/flockCount"), (snapshot) => {
-    activeFlockCount = snapshot.exists() ? snapshot.val() : 0;
-    if(document.getElementById('activeMothersCount')) document.getElementById('activeMothersCount').innerText = activeFlockCount;
-    if(document.getElementById('manualFlockCount')) document.getElementById('manualFlockCount').value = activeFlockCount;
+// 1. الاستماع لرصيد الأمهات وتاريخ الدخول والبيض
+onValue(ref(db, "inventory/flockData"), (snapshot) => {
+    if(snapshot.exists()) {
+        const data = snapshot.val();
+        activeFlockCount = data.count || 0;
+        flockEntryDate = data.entryDate || '';
+        
+        if(document.getElementById('activeMothersCount')) document.getElementById('activeMothersCount').innerText = activeFlockCount;
+        if(document.getElementById('manualFlockCount')) document.getElementById('manualFlockCount').value = activeFlockCount;
+        if(document.getElementById('flockEntryDateInput') && flockEntryDate) document.getElementById('flockEntryDateInput').value = flockEntryDate;
+
+        // حساب عمر القطيع بالأسابيع
+        if(flockEntryDate) {
+            const entryD = new Date(flockEntryDate);
+            const now = new Date();
+            const diffTime = Math.abs(now - entryD);
+            currentFlockAgeWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+            if(document.getElementById('flockAgeDisplay')) document.getElementById('flockAgeDisplay').innerText = currentFlockAgeWeeks;
+        }
+    }
 });
 
 onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
@@ -1373,24 +1390,25 @@ onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
 // 2. تحديث القطيع المباشر
 window.updateFlockLedger = async () => {
     const countInput = document.getElementById('manualFlockCount').value;
+    const dateInput = document.getElementById('flockEntryDateInput').value;
     const newTotal = parseInt(countInput);
     
-    if(isNaN(newTotal) || newTotal < 0) return showToast("برجاء إدخال رقم صحيح!", true);
+    if(isNaN(newTotal) || newTotal < 0) return showToast("برجاء إدخال رقم صحيح للأمهات!", true);
+    if(!dateInput) return showToast("برجاء تحديد تاريخ دخول القطيع!", true);
     
-    await set(ref(db, "inventory/flockCount"), newTotal);
+    await set(ref(db, "inventory/flockData"), { count: newTotal, entryDate: dateInput });
     closeModal('modalFlockUpdate');
-    showToast("تم تحديث رصيد القطيع بنجاح.");
+    showToast("تم تحديث بيانات وعمر القطيع بنجاح.");
 };
 
-
-// 3. المستشار الفني (الفرز والتحليل الذكي)
+// 3. المستشار الفني (الفرز والتحليل الذكي الشامل)
 window.processTriage = async () => {
     const total = parseInt(document.getElementById('triageTotal').value) || 0;
     const bad = parseInt(document.getElementById('triageBad').value) || 0;
     
     if(total <= 0) return showToast("أدخل إجمالي البيض", true);
     if(bad > total) return showToast("البيض المستبعد أكبر من الكلي!", true);
-    if(activeFlockCount <= 0) return showToast("قم بتسجيل رصيد الأمهات أولاً!", true);
+    if(activeFlockCount <= 0) return showToast("قم بتسجيل بيانات الأمهات أولاً!", true);
 
     const good = total - bad;
     const validRate = ((good / total) * 100).toFixed(1);
@@ -1399,24 +1417,29 @@ window.processTriage = async () => {
     // التحليل وبناء التقرير
     let reportHtml = `<div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-bottom:15px;">
         <strong style="color:var(--primary);">الإنتاج اليومي:</strong> ${total} بيضة من ${activeFlockCount} أم.<br>
-        <strong style="color:var(--success);">البيض الصالح:</strong> ${good} (${validRate}%)<br>
+        <strong style="color:var(--success);">البيض الصالح للمكنة:</strong> ${good} (${validRate}%)<br>
         <strong style="color:var(--danger);">البيض المستبعد:</strong> ${bad}
     </div>`;
 
     let warnings = '';
     
-    // فحص نسبة الفرز (الحد العالمي 85%)
+    // فحص عمر القطيع (الإنذار المبكر)
+    if(currentFlockAgeWeeks > 28) {
+        warnings += `<li style="margin-bottom: 5px; color: var(--danger);"><strong>تنبيه إحلال:</strong> القطيع وصل لعمر (${currentFlockAgeWeeks} أسبوع). إنتاجية السمان تنخفض اقتصادياً بعد هذا العمر، يُنصح بالبدء في تجهيز قطيع بديل (إحلال).</li>`;
+    }
+
+    // فحص نسبة الفرز
     if(validRate >= 85) {
         reportHtml += `<div style="color:var(--success); font-weight:bold; margin-bottom: 10px;">✅ جودة القشرة والفرز: ممتازة وطبيعية عالمياً.</div>`;
     } else {
-        warnings += `<li style="margin-bottom: 5px;"><strong>نسبة الفرز (${validRate}%) منخفضة:</strong> يجب ألا تقل عن 85%. راجع نسبة الكالسيوم/الفسفور، تأكد من عدم وجود زحام دهس البيض، وافحص عمر القطيع.</li>`;
+        warnings += `<li style="margin-bottom: 5px;"><strong>نسبة الفرز (${validRate}%) منخفضة:</strong> يجب ألا تقل عن 85%. راجع الكالسيوم، زحام الأقفاص، أو قد يكون السبب كبر عمر القطيع.</li>`;
     }
 
-    // فحص كفاءة الإنتاج (الحد العالمي للسمان 75-85%)
+    // فحص كفاءة الإنتاج 
     if(prodRate >= 75) {
         reportHtml += `<div style="color:var(--success); font-weight:bold;">✅ كفاءة الإنتاج (${prodRate}%): ممتازة ومطابقة للمعدلات.</div>`;
     } else {
-        warnings += `<li><strong>كفاءة الإنتاج (${prodRate}%) ضعيفة:</strong> المعدل الطبيعي 75% فما فوق. راجع نسبة البروتين في العليقة (18-20%) وتأكد من عدد ساعات الإضاءة (14-16 ساعة).</li>`;
+        warnings += `<li><strong>كفاءة الإنتاج (${prodRate}%) ضعيفة:</strong> المعدل الطبيعي 75% فما فوق. راجع بروتين العلف (18-20%) وعدد ساعات الإضاءة.</li>`;
     }
 
     if(warnings !== '') {
@@ -1430,7 +1453,7 @@ window.processTriage = async () => {
     await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs + good);
     await push(ref(db, 'breedersLogs'), {
         date: new Date().toISOString().split('T')[0],
-        mothers: activeFlockCount, total, bad, good, validRate, prodRate, timestamp: Date.now()
+        mothers: activeFlockCount, flockAge: currentFlockAgeWeeks, total, bad, good, validRate, prodRate, timestamp: Date.now()
     });
 
     document.getElementById('triageReportContent').innerHTML = reportHtml;
@@ -1438,9 +1461,18 @@ window.processTriage = async () => {
     openModal('modalTriageReport');
 };
 
-// 4. خريطة مكنة PTO C 10 التفاعلية
+// 4. خريطة مكنة التفريخ (12 رف - سعة حرة)
 onValue(ref(db, "incubatorGrid"), (snapshot) => {
     incubatorShelves = snapshot.exists() ? snapshot.val() : {};
+    
+    // سحب إعدادات المكنة إن وجدت، أو الاعتماد على الـ 12 رف كافتراضي
+    if(globalSettings && globalSettings.setIncShelves) {
+        ptoSettings.shelves = globalSettings.setIncShelves;
+        ptoSettings.capacityPerShelf = globalSettings.setIncShelfCapacity;
+    } else {
+        ptoSettings.shelves = 12; // تثبيت الـ 12 رف
+    }
+    
     renderIncubatorGrid();
 });
 
@@ -1456,7 +1488,7 @@ function renderIncubatorGrid() {
             // رف فارغ
             grid.innerHTML += `<div onclick="openShelfSetup(${i})" style="background: var(--surface); border: 2px dashed var(--border); border-radius: 8px; padding: 15px; text-align: center; cursor: pointer; transition: 0.3s;" onmouseover="this.style.borderColor='var(--info)'" onmouseout="this.style.borderColor='var(--border)'">
                 <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">الرف ${i}</div>
-                <div style="color: var(--success); font-weight: bold;"><i class="fas fa-plus-circle"></i> فارغ (سعة ${ptoSettings.capacityPerShelf})</div>
+                <div style="color: var(--success); font-weight: bold;"><i class="fas fa-plus-circle"></i> فارغ جاهز للتحميل</div>
             </div>`;
         } else {
             // رف مشغول - حساب التواريخ
@@ -1489,8 +1521,7 @@ function renderIncubatorGrid() {
 window.openShelfSetup = (shelfNum) => {
     document.getElementById('selectedShelfNum').innerText = shelfNum;
     document.getElementById('selectedShelfId').value = shelfNum;
-    document.getElementById('shelfMaxCap').innerText = ptoSettings.capacityPerShelf;
-    document.getElementById('shelfLoadQty').value = ptoSettings.capacityPerShelf;
+    document.getElementById('shelfLoadQty').value = ''; // تم إفراغ العدد لتكتبه براحتك
     
     const now = new Date();
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -1504,7 +1535,7 @@ window.toggleShelfInputs = () => {
     document.getElementById('shelfQtyContainer').style.display = type === 'full' ? 'none' : 'block';
 };
 
-// تحميل البيض في المكنة (أرفف مفردة أو كاملة) مع ربطها بالدورة العادية
+// تحميل البيض في المكنة (بعدد حر غير مقيد)
 window.loadIncubatorShelf = async () => {
     const shelfNum = document.getElementById('selectedShelfId').value;
     const type = document.getElementById('shelfLoadType').value;
@@ -1512,32 +1543,33 @@ window.loadIncubatorShelf = async () => {
     
     if(!dateStr) return showToast("أدخل تاريخ الدخول", true);
 
-    let loadedQty = 0; // متغير جديد لحساب الكمية اللي دخلت المكنة وتصديرها كدفعة رسمية
+    let loadedQty = 0; 
 
     if(type === 'partial') {
         const qty = parseInt(document.getElementById('shelfLoadQty').value) || 0;
-        if(qty <= 0 || qty > ptoSettings.capacityPerShelf) return showToast(`العدد يجب أن يكون بين 1 و ${ptoSettings.capacityPerShelf}`, true);
-        if(qty > accumulatedGoodEggs) return showToast("رصيد البيض غير كافٍ!", true);
+        // إزالة قيد الحد الأقصى للرف.. المراقبة فقط على رصيدك المتوفر
+        if(qty <= 0) return showToast(`أدخل رقم صحيح أكبر من الصفر!`, true);
+        if(qty > accumulatedGoodEggs) return showToast("رصيد البيض المتوفر لديك غير كافٍ!", true);
 
         loadedQty = qty;
         await update(ref(db, "incubatorGrid"), { [`shelf_${shelfNum}`]: { qty, insertDate: dateStr } });
         await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs - qty);
-        showToast(`تم إشغال الرف رقم ${shelfNum}`);
+        showToast(`تم إشغال الرف رقم ${shelfNum} بعدد ${qty} بيضة.`);
     } else {
-        // ملء كل الأرفف الفارغة
+        // لو ملء كامل لباقي المكنة (هنا نستخدم السعة التقريبية فقط كدليل)
         let emptyShelvesCount = 0;
         for(let i = 1; i <= ptoSettings.shelves; i++) { if(!incubatorShelves[`shelf_${i}`]) emptyShelvesCount++; }
         
-        const totalNeeded = emptyShelvesCount * ptoSettings.capacityPerShelf;
+        const totalNeeded = emptyShelvesCount * (ptoSettings.capacityPerShelf || 500);
         if(accumulatedGoodEggs < totalNeeded) {
-            return showToast(`رصيدك (${accumulatedGoodEggs}) لا يكفي لملء ${emptyShelvesCount} أرفف (تحتاج ${totalNeeded})`, true);
+            return showToast(`رصيدك (${accumulatedGoodEggs}) لا يكفي لملء ${emptyShelvesCount} أرفف (تحتاج تقريباً ${totalNeeded})`, true);
         }
 
         loadedQty = totalNeeded;
         let updates = {};
         for(let i = 1; i <= ptoSettings.shelves; i++) {
             if(!incubatorShelves[`shelf_${i}`]) {
-                updates[`shelf_${i}`] = { qty: ptoSettings.capacityPerShelf, insertDate: dateStr };
+                updates[`shelf_${i}`] = { qty: (ptoSettings.capacityPerShelf || 500), insertDate: dateStr };
             }
         }
         await update(ref(db, "incubatorGrid"), updates);
@@ -1545,9 +1577,9 @@ window.loadIncubatorShelf = async () => {
         showToast("تم ملء جميع الأرفف الفارغة بنجاح 🚀");
     }
     
-    // --- السحر هنا: إنشاء الدفعة في الدورة الطبيعية للموقع ---
+    // إنشاء الدفعة في الدورة الطبيعية للموقع لترحيلها لاحقاً
     if (loadedQty > 0) {
-        const std = birdStandards['quail']; // قطيع الأمهات سمان
+        const std = birdStandards['quail']; 
         const insertD = new Date(dateStr);
         
         const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
@@ -1569,14 +1601,13 @@ window.loadIncubatorShelf = async () => {
             order: Date.now()
         });
     }
-    // ----------------------------------------------------
 
     closeModal('modalShelfSetup');
 };
 
-// تفريغ الرف بعد خروج الكتاكيت
+// تفريغ الرف
 window.emptyShelf = async (shelfNum) => {
-    if(confirm(`هل أنت متأكد من تفريغ الرف رقم ${shelfNum}؟ (تأكد من تسجيل الكتاكيت الناتجة في قسم التربية)`)) {
+    if(confirm(`هل أنت متأكد من تفريغ الرف رقم ${shelfNum}؟ (تأكد من التعامل مع الدفعة الناتجة من صفحة المفرخ الأساسية)`)) {
         await remove(ref(db, `incubatorGrid/shelf_${shelfNum}`));
         showToast("تم تفريغ الرف وهو الآن جاهز لدفعة جديدة.");
     }
