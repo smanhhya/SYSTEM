@@ -1588,7 +1588,7 @@ window.loadIncubatorShelf = async () => {
 
         const newBatchRef = push(ref(db, 'batches'));
         await set(newBatchRef, { 
-            name: 'إنتاج أمهات ' + dateStr.split('T')[0], 
+            name: 'دفعة ' + dateStr.split('T')[0], 
             birdType: 'quail', 
             insertDate: dateStr, 
             hatcherDate: hatcherD.toISOString(), 
