@@ -1387,18 +1387,30 @@ onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
     if(document.getElementById('availEggsForShelf')) document.getElementById('availEggsForShelf').innerText = accumulatedGoodEggs;
 });
 
-// 2. تحديث القطيع المباشر
+// 2. إعداد وتحديث بيانات القطيع المباشر
 window.updateFlockLedger = async () => {
-    const countInput = document.getElementById('manualFlockCount').value;
-    const dateInput = document.getElementById('flockEntryDateInput').value;
-    const newTotal = parseInt(countInput);
+    // التأكد من وجود العناصر في الشاشة أولاً لمنع الأخطاء الصامتة
+    const countEl = document.getElementById('manualFlockCount');
+    const dateEl = document.getElementById('flockEntryDateInput');
     
-    if(isNaN(newTotal) || newTotal < 0) return showToast("برجاء إدخال رقم صحيح للأمهات!", true);
-    if(!dateInput) return showToast("برجاء تحديد تاريخ دخول القطيع!", true);
+    const newTotal = parseInt(countEl ? countEl.value : 0);
+    const dateInput = dateEl ? dateEl.value : '';
     
-    await set(ref(db, "inventory/flockData"), { count: newTotal, entryDate: dateInput });
-    closeModal('modalFlockUpdate');
-    showToast("تم تحديث بيانات وعمر القطيع بنجاح.");
+    if(isNaN(newTotal) || newTotal < 0) {
+        return showToast("برجاء إدخال رقم صحيح للأمهات!", true);
+    }
+    if(!dateInput) {
+        return showToast("برجاء تحديد تاريخ دخول القطيع لحساب عمره!", true);
+    }
+    
+    try {
+        await set(ref(db, "inventory/flockData"), { count: newTotal, entryDate: dateInput });
+        closeModal('modalFlockUpdate');
+        showToast("تم تحديث بيانات وعمر القطيع بنجاح 🕊️");
+    } catch (error) {
+        console.error(error);
+        showToast("حدث خطأ أثناء الحفظ، تأكد من اتصال الإنترنت.", true);
+    }
 };
 
 // 3. المستشار الفني (الفرز والتحليل الذكي الشامل)
