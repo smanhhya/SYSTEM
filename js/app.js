@@ -1,4 +1,3 @@
-
 import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
 import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
 // استدعاء أدوات Firestore لكي تتمكن المزرعة من التحدث مع الـ CRM
