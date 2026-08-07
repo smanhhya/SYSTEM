@@ -29,7 +29,7 @@ let currentLedgerFilter = 'all';
 let currentLedgerSearch = '';
 
 const birdStandards = {
-    quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 35 },
+    quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 40 },
     chicken: { name: 'فراخ بيضاء', icon: '🐔', hatcher: 18, hatch: 21, slaughter: 40 },
     turkey: { name: 'رومي', icon: '🦃', hatcher: 25, hatch: 28, slaughter: 90 }
 };
@@ -512,7 +512,8 @@ window.promptHatch = (id) => {
         }
 
         // 3. حساب تاريخ الذبح تلقائياً بناءً على تاريخ الفقس وليس اليوم
-        const slaughterAge = 35; // عمر الذبح الافتراضي للسمان
+        const slaughterAge = 40; // عمر الذبح الافتراضي للسمان تم تعديله لـ 40
+
         const slaughterDateObj = new Date(hatchDateObj);
         slaughterDateObj.setDate(slaughterDateObj.getDate() + slaughterAge);
 
@@ -1360,7 +1361,7 @@ let incubatorShelves = {};
 onValue(ref(db, "inventory/flockCount"), (snapshot) => {
     activeFlockCount = snapshot.exists() ? snapshot.val() : 0;
     if(document.getElementById('activeMothersCount')) document.getElementById('activeMothersCount').innerText = activeFlockCount;
-    if(document.getElementById('currentMothersInput')) document.getElementById('currentMothersInput').value = activeFlockCount;
+    if(document.getElementById('manualFlockCount')) document.getElementById('manualFlockCount').value = activeFlockCount;
 });
 
 onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
@@ -1369,21 +1370,18 @@ onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
     if(document.getElementById('availEggsForShelf')) document.getElementById('availEggsForShelf').innerText = accumulatedGoodEggs;
 });
 
-// 2. تحديث القطيع (النافق والإضافة)
+// 2. تحديث القطيع المباشر
 window.updateFlockLedger = async () => {
-    const add = parseInt(document.getElementById('flockAdd').value) || 0;
-    const remove = parseInt(document.getElementById('flockRemove').value) || 0;
-    const newTotal = activeFlockCount + add - remove;
+    const countInput = document.getElementById('manualFlockCount').value;
+    const newTotal = parseInt(countInput);
     
-    if(newTotal < 0) return showToast("الرصيد لا يمكن أن يكون سالباً!", true);
+    if(isNaN(newTotal) || newTotal < 0) return showToast("برجاء إدخال رقم صحيح!", true);
     
     await set(ref(db, "inventory/flockCount"), newTotal);
-    
-    document.getElementById('flockAdd').value = 0;
-    document.getElementById('flockRemove').value = 0;
     closeModal('modalFlockUpdate');
     showToast("تم تحديث رصيد القطيع بنجاح.");
 };
+
 
 // 3. المستشار الفني (الفرز والتحليل الذكي)
 window.processTriage = async () => {
