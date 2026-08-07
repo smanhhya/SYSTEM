@@ -1504,7 +1504,7 @@ window.toggleShelfInputs = () => {
     document.getElementById('shelfQtyContainer').style.display = type === 'full' ? 'none' : 'block';
 };
 
-// تحميل البيض في المكنة (أرفف مفردة أو كاملة)
+// تحميل البيض في المكنة (أرفف مفردة أو كاملة) مع ربطها بالدورة العادية
 window.loadIncubatorShelf = async () => {
     const shelfNum = document.getElementById('selectedShelfId').value;
     const type = document.getElementById('shelfLoadType').value;
@@ -1512,11 +1512,14 @@ window.loadIncubatorShelf = async () => {
     
     if(!dateStr) return showToast("أدخل تاريخ الدخول", true);
 
+    let loadedQty = 0; // متغير جديد لحساب الكمية اللي دخلت المكنة وتصديرها كدفعة رسمية
+
     if(type === 'partial') {
         const qty = parseInt(document.getElementById('shelfLoadQty').value) || 0;
         if(qty <= 0 || qty > ptoSettings.capacityPerShelf) return showToast(`العدد يجب أن يكون بين 1 و ${ptoSettings.capacityPerShelf}`, true);
         if(qty > accumulatedGoodEggs) return showToast("رصيد البيض غير كافٍ!", true);
 
+        loadedQty = qty;
         await update(ref(db, "incubatorGrid"), { [`shelf_${shelfNum}`]: { qty, insertDate: dateStr } });
         await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs - qty);
         showToast(`تم إشغال الرف رقم ${shelfNum}`);
@@ -1530,6 +1533,7 @@ window.loadIncubatorShelf = async () => {
             return showToast(`رصيدك (${accumulatedGoodEggs}) لا يكفي لملء ${emptyShelvesCount} أرفف (تحتاج ${totalNeeded})`, true);
         }
 
+        loadedQty = totalNeeded;
         let updates = {};
         for(let i = 1; i <= ptoSettings.shelves; i++) {
             if(!incubatorShelves[`shelf_${i}`]) {
@@ -1541,6 +1545,32 @@ window.loadIncubatorShelf = async () => {
         showToast("تم ملء جميع الأرفف الفارغة بنجاح 🚀");
     }
     
+    // --- السحر هنا: إنشاء الدفعة في الدورة الطبيعية للموقع ---
+    if (loadedQty > 0) {
+        const std = birdStandards['quail']; // قطيع الأمهات سمان
+        const insertD = new Date(dateStr);
+        
+        const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+        const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+        const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+
+        const newBatchRef = push(ref(db, 'batches'));
+        await set(newBatchRef, { 
+            name: 'إنتاج أمهات ' + dateStr.split('T')[0], 
+            birdType: 'quail', 
+            insertDate: dateStr, 
+            hatcherDate: hatcherD.toISOString(), 
+            hatchDate: hatchD.toISOString(), 
+            rearDate: rearD.toISOString(), 
+            initialEggs: loadedQty, 
+            status: 'incubator', 
+            totalDead: 0, 
+            totalFeed: 0,
+            order: Date.now()
+        });
+    }
+    // ----------------------------------------------------
+
     closeModal('modalShelfSetup');
 };
 
@@ -1551,4 +1581,3 @@ window.emptyShelf = async (shelfNum) => {
         showToast("تم تفريغ الرف وهو الآن جاهز لدفعة جديدة.");
     }
 };
-
