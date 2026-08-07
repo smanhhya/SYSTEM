@@ -274,9 +274,10 @@
             <!-- لوحة القطيع الثابتة -->
             <div class="card" style="border-right: 4px solid var(--info);">
                 <div class="card-header"><i class="fas fa-chart-line"></i> حالة قطيع الأمهات الحالي</div>
-                <div class="grid-2">
-                    <div class="stat-box">الأمهات الحية (الرصيد)<span class="num text-info" id="activeMothersCount">0</span></div>
-                    <div class="stat-box">إجمالي البيض المتراكم الجاهز للمكنة<span class="num text-success" id="readyEggsCount">0</span></div>
+                <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));">
+                    <div class="stat-box">الأمهات الحية<span class="num text-info" id="activeMothersCount">0</span></div>
+                    <div class="stat-box">عمر القطيع<span class="num text-warning" id="flockAgeDisplay">0</span><span style="font-size:10px;">أسبوع</span></div>
+                    <div class="stat-box">بيض للمكنة<span class="num text-success" id="readyEggsCount">0</span></div>
                 </div>
                 <button class="btn btn-primary" style="margin-top: 15px;" onclick="openModal('modalDailyTriage')">
                     <i class="fas fa-egg"></i> إدخال فرز اليوم (تحليل ذكي)
