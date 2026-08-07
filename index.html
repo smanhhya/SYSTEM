@@ -192,6 +192,8 @@
         <button class="fab" onclick="toggleFab()"><i class="fas fa-bolt"></i></button>
         <div class="fab-menu" id="fabMenu">
             <button class="fab-btn" onclick="openModal('modalDaily'); toggleFab()"><i class="fas fa-clipboard-list" style="color: var(--warning);"></i> علف/نافق</button>
+            <button class="fab-btn" onclick="openModal('modalBreederDaily'); toggleFab()"><i class="fas fa-egg" style="color: var(--primary);"></i> فرز الأمهات</button>
+          
             <button class="fab-btn" onclick="openModal('modalSale'); toggleFab()"><i class="fas fa-shopping-cart" style="color: var(--success);"></i> بيع سريع</button>
             <button class="fab-btn" onclick="openModal('modalBatch'); toggleFab()"><i class="fas fa-plus-circle" style="color: var(--info);"></i> دفعة جديدة</button>
         </div>
@@ -224,7 +226,15 @@
         <div id="dashboard" class="page-view active">
             <div class="header-title"><span>لوحة القيادة</span><div><button class="btn btn-primary btn-sm" onclick="openModal('modalBatch')"><i class="fas fa-plus"></i> إضافة دفعة</button></div></div>
 
-            <div class="card"><div class="grid-2"><button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-clipboard-list"></i> علف/نافق</button><button class="btn btn-success" onclick="openModal('modalSale')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button></div></div>
+            <div class="card">
+                <div class="grid-2">
+                    <button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-clipboard-list"></i> علف/نافق</button>
+                    <button class="btn btn-success" onclick="openModal('modalSale')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button>
+                </div>
+                <button class="btn" onclick="switchPage('breeders')" style="background: var(--primary); margin-top:15px; padding:12px; font-size:14px; color: white; width: 100%;">
+                    <i class="fas fa-venus-mars"></i> الدخول لقطيع الأمهات وفرز البيض
+                </button>
+            </div>
             
             <div class="card">
                 <div class="card-header">ملخص المزرعة <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal;">(اضغط للتفاصيل)</span></div>
