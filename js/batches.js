@@ -1,3 +1,4 @@
+
 // js/batches.js
 import { db, ref, push, update, remove, onValue, set, get } from './firebase.js';
 import { toggleLoader, showToast, closeModal } from './ui.js';
