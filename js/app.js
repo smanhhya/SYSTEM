@@ -1513,7 +1513,29 @@ window.openBreederGuide = () => {
         </div>
 
         <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
-            <div style="f
+            <div style="font-size:12px; color:var(--text-secondary);">🌾 احتياج العلف اليومي (${activeFlockCount} طائر)</div>
+            <div style="font-size:20px; font-weight:bold; color:var(--success);">${feedRec} كجم</div>
+            <div style="font-size:12px; color:var(--text-secondary); margin-top:5px;">المواصفة: ${proteinRec}</div>
+        </div>
+
+        <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--info);">
+            <div style="font-size:12px; color:var(--text-secondary);">💧 احتياج المياه اليومي</div>
+            <div style="font-size:20px; font-weight:bold; color:var(--info);">${waterRec} لتر</div>
+        </div>
+    </div>
+    `;
+
+    if (currentFlockAgeWeeks > 28) {
+        adviceHtml += `
+        <div style="background: rgba(220,38,38,0.1); padding:10px; border-radius:8px; margin-top:10px; color:var(--danger); border:1px dashed var(--danger);">
+            <strong>⚠️ تنبيه استراتيجي:</strong> القطيع تخطى 28 أسبوع، إنتاجية البيض ونسبة الإخصاب ستبدأ في الانحدار السريع. يُنصح بتجهيز قطيع "إحلال" الآن للحفاظ على استمرارية الإنتاج.
+        </div>`;
+    }
+
+    document.getElementById('breederGuideContent').innerHTML = adviceHtml;
+    openModal('modalBreederGuide');
+};
+
 window.toggleTriagePeriod = () => {
     const mode = document.getElementById('triagePeriodMode').value;
     document.getElementById('triagePeriodDates').style.display = mode === 'period' ? 'grid' : 'none';
