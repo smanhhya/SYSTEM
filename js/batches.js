@@ -1,5 +1,5 @@
 // js/batches.js
-import { db, ref, push, update, remove, onValue } from './firebase.js';
+import { db, ref, push, update, remove, onValue, set, get } from './firebase.js';
 import { toggleLoader, showToast, closeModal } from './ui.js';
 import { validateNumber, validateString } from './helpers.js';
 import { birdStandards } from './settings.js';
@@ -18,6 +18,12 @@ export function initBatches() {
     window.saveNewBatch = saveNewBatch;
     window.deleteBatch = deleteBatch;
     window.updateStage = updateStage;
+    
+    // 💡 دوال المفرخ الذكي والأرفف المجمعة
+    window.loadIncubatorShelf = loadIncubatorShelf;
+    window.toggleShelfInputs = toggleShelfInputs;
+    window.calcShelfDist = calcShelfDist;
+    window.emptyShelf = emptyShelf;
 }
 
 // 1. إدخال دفعة جديدة (مع الحساب التلقائي للتواريخ)
@@ -106,7 +112,7 @@ async function deleteBatch(id) {
     }
 }
 
-// 4. دالة عرض الدفعات في الشاشات المختلفة (Dashboard, Incubator, Rearing)
+// 4. دالة عرض الدفعات في الشاشات المختلفة
 function renderBatches() {
     const ui = { 
         inc: document.getElementById('incubatorList'), 
@@ -115,7 +121,6 @@ function renderBatches() {
         alerts: document.getElementById('alertsContainer') 
     };
     
-    // تفريغ القوائم قبل إعادة الملء لتجنب التكرار
     if(ui.inc) ui.inc.innerHTML = ''; 
     if(ui.rear) ui.rear.innerHTML = ''; 
     if(ui.slaugh) ui.slaugh.innerHTML = ''; 
@@ -128,7 +133,6 @@ function renderBatches() {
         const b = allBatches[id];
         const bTypeName = birdStandards[b.birdType || 'quail']?.name || 'طائر';
         
-        // عرض مبسط للتنبيهات (ستُطور لاحقاً في ملف التقارير)
         if (b.status === 'incubator' || b.status === 'hatcher') {
             stats.eggs += b.initialEggs;
             const daysIn = Math.floor((now - new Date(b.insertDate)) / 86400000);
@@ -137,22 +141,173 @@ function renderBatches() {
             if(b.status === 'incubator' && daysIn >= bStd.hatcher && ui.alerts) {
                 ui.alerts.innerHTML += `<div>⚠️ الدفعة <b>${b.name}</b> جاهزة للمفقس.</div>`; 
             }
-            
-            // ... (هنا يتم إدراج HTML الخاص بكروت التفريخ كما هو في الكود القديم)
-            // لتجنب زحمة الكود هنا، نكتفي بربط البيانات.
         }
         else if (b.status === 'rearing') {
             const alive = b.hatchedChicks - (b.totalDead||0); 
             stats.chicks += alive;
-            // ...
         }
     });
 
     if(ui.alerts && ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div class="text-success" style="font-weight:bold;">✅ لا يوجد تنبيهات عاجلة.</div>';
     
-    // تحديث أرقام لوحة القيادة
     const dashEggs = document.getElementById('dashEggs');
     const dashChicks = document.getElementById('dashChicks');
     if (dashEggs) dashEggs.innerText = stats.eggs; 
     if (dashChicks) dashChicks.innerText = stats.chicks;
+}
+
+// ========================================================
+// 💡 أجزاء المفرخ الذكي المفقودة التي تم إضافتها ودمجها هنا
+// ========================================================
+
+function toggleShelfInputs() {
+    const type = document.getElementById('shelfLoadType').value;
+    const multiContainer = document.getElementById('multiShelfContainer');
+    if(multiContainer) multiContainer.style.display = type === 'multi' ? 'block' : 'none';
+    calcShelfDist();
+}
+
+async function calcShelfDist() {
+    const type = document.getElementById('shelfLoadType')?.value;
+    const totalEggs = parseInt(document.getElementById('shelfLoadQty')?.value) || 0;
+    const hint = document.getElementById('shelfDistHint');
+    if(!hint) return;
+
+    let shelvesCount = 1;
+    
+    // سحب إعدادات المكنة لضمان صحة التقسيم
+    const settingsSnap = await get(ref(db, "settings"));
+    const ptoShelves = settingsSnap.exists() && settingsSnap.val().setIncShelves ? settingsSnap.val().setIncShelves : 12;
+
+    if (type === 'multi') {
+        shelvesCount = parseInt(document.getElementById('multiShelfCount').value) || 1;
+    } else if (type === 'full') {
+        let empty = 0;
+        const gridSnap = await get(ref(db, "incubatorGrid"));
+        const incubatorShelves = gridSnap.exists() ? gridSnap.val() : {};
+        for(let i = 1; i <= ptoShelves; i++) { if(!incubatorShelves[`shelf_${i}`]) empty++; }
+        shelvesCount = empty;
+    }
+    
+    if(shelvesCount > 0 && totalEggs > 0) {
+        const perShelf = Math.floor(totalEggs / shelvesCount);
+        hint.innerHTML = `<i class="fas fa-layer-group"></i> سيتم تقسيم (${totalEggs} بيضة) على (${shelvesCount} أرفف) بواقع <b>~${perShelf} بيضة/رف</b> ضمن <u>دفعة واحدة</u>.`;
+    } else {
+        hint.innerHTML = '';
+    }
+}
+
+async function loadIncubatorShelf() {
+    const startShelfNum = parseInt(document.getElementById('selectedShelfId').value);
+    const type = document.getElementById('shelfLoadType').value;
+    const dateStr = document.getElementById('shelfLoadDate').value;
+    const totalEggs = parseInt(document.getElementById('shelfLoadQty').value) || 0;
+    
+    if(!dateStr) return showToast("أدخل تاريخ الدخول", true);
+    if(totalEggs <= 0) return showToast("الرجاء إدخال إجمالي عدد البيض!", true);
+
+    toggleLoader(true, "جاري توزيع الأرفف وتكوين الدفعة...");
+
+    try {
+        const eggsSnap = await get(ref(db, "inventory/readyEggsStock"));
+        const accumulatedGoodEggs = eggsSnap.exists() ? eggsSnap.val() : 0;
+
+        if(totalEggs > accumulatedGoodEggs) {
+            toggleLoader(false);
+            return showToast(`رصيدك (${accumulatedGoodEggs}) غير كافٍ لهذه الدفعة!`, true);
+        }
+
+        const settingsSnap = await get(ref(db, "settings"));
+        const ptoShelves = settingsSnap.exists() && settingsSnap.val().setIncShelves ? settingsSnap.val().setIncShelves : 12;
+
+        const gridSnap = await get(ref(db, "incubatorGrid"));
+        const incubatorShelves = gridSnap.exists() ? gridSnap.val() : {};
+
+        let targetShelvesCount = 1;
+        if (type === 'multi') {
+            targetShelvesCount = parseInt(document.getElementById('multiShelfCount').value) || 1;
+        } else if (type === 'full') {
+            let empty = 0;
+            for(let i = 1; i <= ptoShelves; i++) { if(!incubatorShelves[`shelf_${i}`]) empty++; }
+            targetShelvesCount = empty;
+        }
+
+        if (targetShelvesCount <= 0) {
+            toggleLoader(false);
+            return showToast("لا يوجد أرفف مستهدفة!", true);
+        }
+
+        let emptyShelvesToFill = [];
+        if (!incubatorShelves[`shelf_${startShelfNum}`]) emptyShelvesToFill.push(startShelfNum);
+
+        for(let i = 1; i <= ptoShelves && emptyShelvesToFill.length < targetShelvesCount; i++) {
+            if(i !== startShelfNum && !incubatorShelves[`shelf_${i}`]) emptyShelvesToFill.push(i);
+        }
+
+        if(emptyShelvesToFill.length < targetShelvesCount) {
+            toggleLoader(false);
+            return showToast(`الأرفف الفارغة لا تكفي! المطلوب (${targetShelvesCount}) والمتاح (${emptyShelvesToFill.length}) فقط.`, true);
+        }
+
+        // إنشاء ID الدفعة الواحدة لجميع الأرفف
+        const newBatchId = push(ref(db, 'batches')).key; 
+        
+        const perShelf = Math.floor(totalEggs / targetShelvesCount);
+        const remainder = totalEggs % targetShelvesCount;
+        let updates = {};
+
+        emptyShelvesToFill.forEach((shelfNum, index) => {
+            let qtyForThisShelf = perShelf + (index === 0 ? remainder : 0); 
+            updates[`shelf_${shelfNum}`] = { 
+                qty: qtyForThisShelf, 
+                insertDate: dateStr,
+                batchId: newBatchId 
+            };
+        });
+
+        await update(ref(db, "incubatorGrid"), updates);
+        await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs - totalEggs);
+
+        const std = birdStandards['quail']; 
+        const insertD = new Date(dateStr);
+        const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+        const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+        const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+
+        let batchNameExt = targetShelvesCount > 1 ? ` (مجمعة ${targetShelvesCount} أرفف)` : '';
+
+        await set(ref(db, `batches/${newBatchId}`), { 
+            name: 'دفعة ' + dateStr.split('T')[0] + batchNameExt, 
+            birdType: 'quail', 
+            insertDate: dateStr, 
+            hatcherDate: hatcherD.toISOString(), 
+            hatchDate: hatchD.toISOString(), 
+            rearDate: rearD.toISOString(), 
+            initialEggs: totalEggs, 
+            status: 'incubator', 
+            totalDead: 0, 
+            totalFeed: 0,
+            createdAt: Date.now()
+        });
+
+        showToast(`تم توزيع الدفعة بنجاح على ${targetShelvesCount} أرفف! 🚀`);
+        closeModal('modalShelfSetup');
+    } catch (error) {
+        console.error(error);
+        showToast("حدث خطأ أثناء تحميل المكنة.", true);
+    } finally {
+        toggleLoader(false);
+    }
+}
+
+async function emptyShelf(shelfNum) {
+    if(confirm(`هل أنت متأكد من تفريغ الرف رقم ${shelfNum}؟`)) {
+        try {
+            await remove(ref(db, `incubatorGrid/shelf_${shelfNum}`));
+            showToast("تم تفريغ الرف وهو جاهز الآن لدفعة جديدة.");
+        } catch(error) {
+            console.error(error);
+            showToast("حدث خطأ أثناء التفريغ", true);
+        }
+    }
 }
