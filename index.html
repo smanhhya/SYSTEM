@@ -352,18 +352,33 @@
 
 
 
-        <!-- نافذة الفرز والمستشار الذكي -->
+        <!-- نافذة الفرز والمستشار الذكي (نسخة الفترات) -->
         <div id="modalDailyTriage" class="modal-overlay">
             <div class="modal-content">
                 <button class="close-modal" onclick="closeModal('modalDailyTriage')"><i class="fas fa-times"></i></button>
                 <h3 style="margin-top: 0; color: var(--primary);">المستشار الفني - فرز البيض</h3>
+                
+                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="margin-top: 0;">نظام التسجيل</label>
+                    <select id="triagePeriodMode" onchange="toggleTriagePeriod()">
+                        <option value="daily">تسجيل يومي (إنتاج اليوم فقط)</option>
+                        <option value="period">تجميع فترة (تسجيل عن عدة أيام متصلة)</option>
+                    </select>
+                </div>
+
+                <div id="triagePeriodDates" class="grid-2" style="display: none; background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed var(--primary); margin-bottom: 15px;">
+                    <div><label style="margin-top: 0;">من يوم</label><input type="date" id="triageStartDate"></div>
+                    <div><label style="margin-top: 0;">إلى يوم</label><input type="date" id="triageEndDate"></div>
+                </div>
+
                 <div class="grid-2">
-                    <div><label>البيض الكلي المنتج اليوم</label><input type="number" id="triageTotal" value="0"></div>
+                    <div><label>البيض الكلي (المنتج)</label><input type="number" id="triageTotal" value="0"></div>
                     <div><label>البيض المستبعد/المكسور</label><input type="number" id="triageBad" value="0"></div>
                 </div>
                 <button class="btn btn-primary" onclick="processTriage()">تم (تحليل وحفظ)</button>
             </div>
         </div>
+
 
         <!-- نافذة التقرير الذكي (تظهر بعد الفرز) -->
         <div id="modalTriageReport" class="modal-overlay">
@@ -375,32 +390,39 @@
             </div>
         </div>
 
-        <!-- إعداد رف المكنة -->
+        <!-- إعداد رف المكنة (الدفعة المجمعة) -->
         <div id="modalShelfSetup" class="modal-overlay">
             <div class="modal-content">
                 <button class="close-modal" onclick="closeModal('modalShelfSetup')"><i class="fas fa-times"></i></button>
-                <h3 style="margin-top: 0; color: var(--info);">إعداد الرف رقم <span id="selectedShelfNum"></span></h3>
+                <h3 style="margin-top: 0; color: var(--info);">تكوين دفعة جديدة (ابتداءً من رف <span id="selectedShelfNum"></span>)</h3>
                 <input type="hidden" id="selectedShelfId">
                 
                 <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-weight: bold;">
                     البيض المتوفر للتحضين: <span id="availEggsForShelf" style="color:var(--success);">0</span>
                 </div>
 
-                <label>نوع التحضين</label>
+                <label>نطاق التعبئة (لتكوين دفعة واحدة)</label>
                 <select id="shelfLoadType" onchange="toggleShelfInputs()">
-                    <option value="partial">دفعة متفرقة (رف واحد)</option>
-                    <option value="full">دفعة كاملة (ملء كل الأرفف الفارغة)</option>
+                    <option value="single">تعبئة هذا الرف فقط (دفعة مخصصة)</option>
+                    <option value="multi">تعبئة عدة أرفف معاً (كدفعة واحدة)</option>
+                    <option value="full">ملء كل الأرفف الفارغة (كدفعة واحدة)</option>
                 </select>
 
-                <div id="shelfQtyContainer">
-                    <label>العدد المدخل لهذا الرف (الحد الأقصى <span id="shelfMaxCap"></span>)</label>
-                    <input type="number" id="shelfLoadQty">
+                <div id="multiShelfContainer" style="display: none; background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed var(--primary); margin-top: 10px;">
+                    <label style="margin-top: 0;">كم رف تريد تعبئته في هذه الدفعة؟</label>
+                    <input type="number" id="multiShelfCount" value="1" oninput="calcShelfDist()">
                 </div>
 
-                <label>تاريخ الدخول</label>
+                <div id="shelfQtyContainer">
+                    <label>إجمالي عدد البيض لهذه الدفعة</label>
+                    <input type="number" id="shelfLoadQty" oninput="calcShelfDist()">
+                    <div id="shelfDistHint" style="font-size:12px; color:var(--info); margin-top:5px; font-weight:bold;"></div>
+                </div>
+
+                <label>تاريخ الدخول للمكنة</label>
                 <input type="datetime-local" id="shelfLoadDate">
 
-                <button class="btn btn-success" onclick="loadIncubatorShelf()">تأكيد وإدخال للمكنة</button>
+                <button class="btn btn-success" onclick="loadIncubatorShelf()">تأكيد وتكوين الدفعة</button>
             </div>
         </div>
 
