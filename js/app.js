@@ -1352,6 +1352,8 @@ if ('serviceWorker' in navigator) {
 // ================= 12. نظام الإدارة الذكي (الأمهات ومكنة PTO C 12) =================
 
 let activeFlockCount = 0;
+let activeFemales = 0;
+let activeMales = 0;
 let flockEntryDate = '';
 let currentFlockAgeWeeks = 0;
 let accumulatedGoodEggs = 0;
@@ -1363,12 +1365,35 @@ let incubatorShelves = {};
 onValue(ref(db, "inventory/flockData"), (snapshot) => {
     if(snapshot.exists()) {
         const data = snapshot.val();
-        activeFlockCount = data.count || 0;
+        activeFemales = data.females || 0;
+        activeMales = data.males || 0;
+        activeFlockCount = activeFemales + activeMales;
         flockEntryDate = data.entryDate || '';
         
         if(document.getElementById('activeMothersCount')) document.getElementById('activeMothersCount').innerText = activeFlockCount;
-        if(document.getElementById('manualFlockCount')) document.getElementById('manualFlockCount').value = activeFlockCount;
+        if(document.getElementById('activeFemalesCount')) document.getElementById('activeFemalesCount').innerText = activeFemales;
+        if(document.getElementById('activeMalesCount')) document.getElementById('activeMalesCount').innerText = activeMales;
+        
+        if(document.getElementById('manualFemalesCount')) document.getElementById('manualFemalesCount').value = activeFemales;
+        if(document.getElementById('manualMalesCount')) document.getElementById('manualMalesCount').value = activeMales;
         if(document.getElementById('flockEntryDateInput') && flockEntryDate) document.getElementById('flockEntryDateInput').value = flockEntryDate;
+
+        // حساب نسبة الإخصاب المتوقعة للسمان
+        const badge = document.getElementById('fertilityBadge');
+        if(badge && activeFlockCount > 0) {
+            const maleRatio = activeMales / activeFemales; // نسبة الذكور للإناث
+            let fertilityRate = 0;
+            if (maleRatio >= 0.33 && maleRatio <= 0.5) { // 1 ذكر لـ 2 أو 3 إناث
+                fertilityRate = 92; badge.style.background = 'var(--success)';
+            } else if (maleRatio > 0.5) { // ذكور كثيرة = شجار
+                fertilityRate = 80; badge.style.background = 'var(--warning)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (تكدس ذكور)`;
+            } else if (maleRatio >= 0.2) { // 1 لـ 4 أو 5 (قليل)
+                fertilityRate = 75; badge.style.background = 'var(--warning)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (نقص ذكور)`;
+            } else {
+                fertilityRate = 50; badge.style.background = 'var(--danger)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (خطر)`;
+            }
+            if(fertilityRate >= 90) badge.innerHTML = `إخصاب متوقع: ${fertilityRate}% (مثالي)`;
+        }
 
         // حساب عمر القطيع بالأسابيع
         if(flockEntryDate) {
@@ -1389,30 +1414,106 @@ onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
 
 // 2. إعداد وتحديث بيانات القطيع المباشر
 window.updateFlockLedger = async () => {
-    // التأكد من وجود العناصر في الشاشة أولاً لمنع الأخطاء الصامتة
-    const countEl = document.getElementById('manualFlockCount');
-    const dateEl = document.getElementById('flockEntryDateInput');
+    const fCount = parseInt(document.getElementById('manualFemalesCount')?.value) || 0;
+    const mCount = parseInt(document.getElementById('manualMalesCount')?.value) || 0;
+    const dateInput = document.getElementById('flockEntryDateInput')?.value || '';
+    const cost = parseFloat(document.getElementById('flockInitialCost')?.value) || 0;
     
-    const newTotal = parseInt(countEl ? countEl.value : 0);
-    const dateInput = dateEl ? dateEl.value : '';
-    
-    if(isNaN(newTotal) || newTotal < 0) {
-        return showToast("برجاء إدخال رقم صحيح للأمهات!", true);
-    }
-    if(!dateInput) {
-        return showToast("برجاء تحديد تاريخ دخول القطيع لحساب عمره!", true);
-    }
+    if(fCount < 0 || mCount < 0) return showToast("برجاء إدخال أرقام صحيحة!", true);
+    if(!dateInput) return showToast("برجاء تحديد تاريخ الدخول!", true);
     
     try {
-        await set(ref(db, "inventory/flockData"), { count: newTotal, entryDate: dateInput });
+        await set(ref(db, "inventory/flockData"), { females: fCount, males: mCount, entryDate: dateInput });
+        
+        if (cost > 0) {
+            await push(ref(db, 'ledger'), { 
+                type: 'out', 
+                amount: cost, 
+                desc: `تأسيس/تجديد قطيع أمهات (${fCount} إناث، ${mCount} ذكور)`, 
+                batchId: 'general', 
+                date: new Date().toISOString().split('T')[0], 
+                timestamp: Date.now() 
+            });
+            await set(ref(db, "cashBox"), manualCash - cost);
+        }
+        
         closeModal('modalFlockUpdate');
-        showToast("تم تحديث بيانات وعمر القطيع بنجاح 🕊️");
+        showToast("تم تأسيس القطيع وحفظ التكاليف بنجاح 🕊️");
     } catch (error) {
         console.error(error);
-        showToast("حدث خطأ أثناء الحفظ، تأكد من اتصال الإنترنت.", true);
+        showToast("حدث خطأ أثناء الحفظ.", true);
     }
 };
 
+// 2.1 تسجيل يوميات الأمهات (الذكاء الاصطناعي لحفظ الحركات)
+window.saveBreederDailyLog = async () => {
+    const deadF = parseInt(document.getElementById('bdDeadFemales')?.value) || 0;
+    const deadM = parseInt(document.getElementById('bdDeadMales')?.value) || 0;
+    const feed = parseFloat(document.getElementById('bdFeed')?.value) || 0;
+    
+    if (deadF === 0 && deadM === 0 && feed === 0) return showToast("أدخل بيانات صحيحة", true);
+    if (deadF > activeFemales || deadM > activeMales) return showToast("النافق أكبر من الموجود!", true);
+    if (feed > currentFeedStock) return showToast(`رصيد العلف لا يكفي! المتاح ${currentFeedStock} كجم`, true);
+
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+        // تحديث أعداد القطيع
+        await set(ref(db, "inventory/flockData/females"), activeFemales - deadF);
+        await set(ref(db, "inventory/flockData/males"), activeMales - deadM);
+        
+        // تسجيل في سجل الأمهات الخاص
+        await push(ref(db, 'breedersHistoryLogs'), { date: today, deadFemales: deadF, deadMales: deadM, feedConsumed: feed, timestamp: Date.now() });
+
+        // سحب العلف وتنزيله تكلفة في الحسابات
+        if (feed > 0) {
+            await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
+            const feedCost = feed * (globalSettings.feedPrice || 30);
+            await push(ref(db, 'ledger'), { 
+                type: 'batch_cost', 
+                amount: feedCost, 
+                desc: `استهلاك علف أمهات بياض (${feed} كجم)`, 
+                batchId: 'general', 
+                date: today, 
+                timestamp: Date.now() 
+            });
+        }
+        
+        closeModal('modalBreederDaily');
+        showToast("تم تسجيل يومية الأمهات بامتياز 📝");
+    } catch(e) { console.error(e); showToast("خطأ في التسجيل", true); }
+};
+
+// 2.2 دليل أمهات السمان الذكي (حسب المعايير العالمية)
+window.openBreederGuide = () => {
+    if(activeFlockCount === 0) return showToast("الرجاء إدخال قطيع أولاً!", true);
+    
+    let feedRec = (activeFlockCount * 0.033).toFixed(1); // 33 جرام للسمانة البياضة يوميا
+    let waterRec = (feedRec * 2.5).toFixed(1); // لتر مياه
+    let lightRec = "14 إلى 16 ساعة متصلة (لتحفيز الغدة النخامية للبيض)";
+    let tempRec = "21°C - 24°C";
+    let proteinRec = "علف بياض (بروتين 18% إلى 20%، كالسيوم 2.5% إلى 3%)";
+    
+    let adviceHtml = `
+    <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
+        <div style="text-align:center; margin-bottom:15px;">
+            <span style="font-size:14px; color:var(--text-secondary);">عمر القطيع:</span>
+            <span style="font-size:18px; color:#8b5cf6; font-weight:800;">${currentFlockAgeWeeks} أسبوع</span>
+        </div>
+        
+        <div class="grid-2" style="gap:10px;">
+            <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
+                <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة</div>
+                <div style="font-size:16px; font-weight:bold;">${tempRec}</div>
+            </div>
+            <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--warning);">
+                <div style="font-size:12px; color:var(--text-secondary);">💡 الإضاءة</div>
+                <div style="font-size:14px; font-weight:bold;">${lightRec}</div>
+            </div>
+        </div>
+
+        <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
+            <div style="f
 // 3. المستشار الفني (الفرز والتحليل الذكي الشامل)
 window.processTriage = async () => {
     const total = parseInt(document.getElementById('triageTotal').value) || 0;
@@ -1420,11 +1521,12 @@ window.processTriage = async () => {
     
     if(total <= 0) return showToast("أدخل إجمالي البيض", true);
     if(bad > total) return showToast("البيض المستبعد أكبر من الكلي!", true);
-    if(activeFlockCount <= 0) return showToast("قم بتسجيل بيانات الأمهات أولاً!", true);
+    if(activeFemales <= 0) return showToast("قم بتسجيل عدد الإناث أولاً!", true);
 
     const good = total - bad;
     const validRate = ((good / total) * 100).toFixed(1);
-    const prodRate = ((total / activeFlockCount) * 100).toFixed(1);
+    // كفاءة الإنتاج تُقاس على عدد الإناث فقط في السمان
+    const prodRate = ((total / activeFemales) * 100).toFixed(1);
 
     // التحليل وبناء التقرير
     let reportHtml = `<div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-bottom:15px;">
