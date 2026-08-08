@@ -271,17 +271,28 @@
                 <button class="btn btn-warning btn-sm" onclick="openModal('modalFlockUpdate')"><i class="fas fa-heartbeat"></i> تحديث القطيع (نافق/استبعاد)</button>
             </div>
             
-            <!-- لوحة القطيع الثابتة -->
+            <!-- لوحة القطيع الثابتة (النسخة الذكية) -->
             <div class="card" style="border-right: 4px solid var(--info);">
-                <div class="card-header"><i class="fas fa-chart-line"></i> حالة قطيع الأمهات الحالي</div>
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span><i class="fas fa-chart-line"></i> حالة قطيع أمهات السمان</span>
+                    <span id="fertilityBadge" class="badge" style="background:var(--success);">إخصاب متوقع: 0%</span>
+                </div>
                 <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));">
-                    <div class="stat-box">الأمهات الحية<span class="num text-info" id="activeMothersCount">0</span></div>
+                    <div class="stat-box">إجمالي القطيع<span class="num text-info" id="activeMothersCount">0</span></div>
+                    <div class="stat-box" style="border-color: #f472b6;">إناث (بياض)<span class="num" style="color: #f472b6;" id="activeFemalesCount">0</span></div>
+                    <div class="stat-box" style="border-color: #38bdf8;">ذكور (تلقيح)<span class="num" style="color: #38bdf8;" id="activeMalesCount">0</span></div>
                     <div class="stat-box">عمر القطيع<span class="num text-warning" id="flockAgeDisplay">0</span><span style="font-size:10px;">أسبوع</span></div>
                     <div class="stat-box">بيض للمكنة<span class="num text-success" id="readyEggsCount">0</span></div>
                 </div>
-                <button class="btn btn-primary" style="margin-top: 15px;" onclick="openModal('modalDailyTriage')">
-                    <i class="fas fa-egg"></i> إدخال فرز اليوم (تحليل ذكي)
-                </button>
+                
+                <div class="grid-2" style="margin-top: 15px;">
+                    <button class="btn btn-primary" style="margin-top: 0; padding: 12px; font-size: 14px;" onclick="openModal('modalDailyTriage')">
+                        <i class="fas fa-egg"></i> فرز البيض (تحليل)
+                    </button>
+                    <button class="btn btn-info" style="margin-top: 0; padding: 12px; font-size: 14px; background: #8b5cf6;" onclick="openBreederGuide()">
+                        <i class="fas fa-brain"></i> دليل الأمهات الذكي
+                    </button>
+                </div>
             </div>
 
             <!-- الخريطة التفاعلية للمكنة -->
@@ -298,21 +309,44 @@
     <div id="modalFlockUpdate" class="modal-overlay">
         <div class="modal-content">
             <button class="close-modal" onclick="closeModal('modalFlockUpdate')"><i class="fas fa-times"></i></button>
-            <h3 style="margin-top: 0; color: var(--warning);">إعداد قطيع الأمهات</h3>
+            <h3 style="margin-top: 0; color: var(--warning);">إعداد قطيع الأمهات (تأسيس)</h3>
             
             <div class="grid-2">
-                <div>
-                    <label>العدد الفعلي للأمهات</label>
-                    <input type="number" id="manualFlockCount" placeholder="مثال: 1000">
-                </div>
-                <div>
-                    <label>تاريخ دخول القطيع</label>
-                    <input type="date" id="flockEntryDateInput">
-                </div>
+                <div><label>عدد الإناث (السمّانات)</label><input type="number" id="manualFemalesCount" placeholder="مثال: 750"></div>
+                <div><label>عدد الذكور</label><input type="number" id="manualMalesCount" placeholder="مثال: 250"></div>
+            </div>
+            <div class="grid-2">
+                <div><label>تاريخ دخول القطيع</label><input type="date" id="flockEntryDateInput"></div>
+                <div><label>تكلفة شراء/تجهيز القطيع (ج.م)</label><input type="number" id="flockInitialCost" placeholder="ستسجل في الحسابات"></div>
             </div>
             
-            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; margin-top: 10px; background: var(--bg-main); padding: 10px; border-radius: 8px;">* بمجرد إدخال التاريخ، سيقوم النظام بحساب عمر القطيع بالأسابيع وتنبيهك لاحقاً بموعد الإحلال وتجديد الدماء.</div>
-            <button class="btn btn-warning" onclick="updateFlockLedger()">حفظ وتحديث الرصيد</button>
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; margin-top: 10px; background: var(--bg-main); padding: 10px; border-radius: 8px;">* النظام سيقوم بحساب نسبة الإخصاب تلقائياً بناءً على النسبة بين الذكور والإناث (المعيار للسمان 1 ذكر لكل 2 إلى 3 إناث).</div>
+            <button class="btn btn-warning" onclick="updateFlockLedger()">حفظ وتأسيس القطيع</button>
+        </div>
+    </div>
+
+    <!-- نافذة يوميات الأمهات (علف ونافق) -->
+    <div id="modalBreederDaily" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalBreederDaily')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: #8b5cf6;"><i class="fas fa-clipboard-list"></i> يوميات الأمهات (علف ونافق)</h3>
+            <div class="grid-2">
+                <div><label>نافق إناث</label><input type="number" id="bdDeadFemales" value="0"></div>
+                <div><label>نافق ذكور</label><input type="number" id="bdDeadMales" value="0"></div>
+            </div>
+            <label>علف بياض مستهلك اليوم (كجم)</label>
+            <input type="number" id="bdFeed" value="0" placeholder="سيخصم من مخزن العلف">
+            <button class="btn" style="background: #8b5cf6; margin-top: 20px; color: white; width: 100%; padding: 14px; border-radius: 12px; font-weight: bold; border: none; cursor: pointer;" onclick="saveBreederDailyLog()">تسجيل اليومية</button>
+        </div>
+    </div>
+
+    <!-- نافذة الدليل الذكي للأمهات -->
+    <div id="modalBreederGuide" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalBreederGuide')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: #8b5cf6;"><i class="fas fa-brain"></i> مستشار أمهات السمان</h3>
+            <div id="breederGuideContent" style="margin-top: 15px; line-height: 1.8;"></div>
+            <button class="btn btn-info" style="margin-top: 20px;" onclick="closeModal('modalBreederGuide')">حسناً، عُلم 👍</button>
         </div>
     </div>
 
