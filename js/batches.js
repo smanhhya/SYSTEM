@@ -200,13 +200,13 @@ async function calcShelfDist() {
 async function loadIncubatorShelf() {
     const startShelfNum = parseInt(document.getElementById('selectedShelfId').value);
     const type = document.getElementById('shelfLoadType').value;
-    const dateStr = document.getElementById('shelfLoadDate').value;
+    const dateStr = document.getElementById('shelfLoadDate').value; // مثلا: 2026-08-08T10:00
     const totalEggs = parseInt(document.getElementById('shelfLoadQty').value) || 0;
     
     if(!dateStr) return showToast("أدخل تاريخ الدخول", true);
     if(totalEggs <= 0) return showToast("الرجاء إدخال إجمالي عدد البيض!", true);
 
-    toggleLoader(true, "جاري توزيع الأرفف وتكوين الدفعة...");
+    toggleLoader(true, "جاري توزيع الأرفف والدمج الذكي...");
 
     try {
         const eggsSnap = await get(ref(db, "inventory/readyEggsStock"));
@@ -249,8 +249,24 @@ async function loadIncubatorShelf() {
             return showToast(`الأرفف الفارغة لا تكفي! المطلوب (${targetShelvesCount}) والمتاح (${emptyShelvesToFill.length}) فقط.`, true);
         }
 
-        // إنشاء ID الدفعة الواحدة لجميع الأرفف
-        const newBatchId = push(ref(db, 'batches')).key; 
+        // =========================================================
+        // 💡 السحر هنا: البحث عن دفعة بنفس التاريخ لدمج الرفوف معها
+        // =========================================================
+        const dateOnly = dateStr.split('T')[0]; // استخراج التاريخ فقط (بدون الوقت)
+        let existingBatchId = null;
+        let existingInitialEggs = 0;
+
+        // البحث في الدفعات الموجودة عن دفعة في المفرخ بنفس تاريخ اليوم
+        for (const [id, b] of Object.entries(allBatches)) {
+            if (b.status === 'incubator' && b.insertDate.startsWith(dateOnly)) {
+                existingBatchId = id;
+                existingInitialEggs = b.initialEggs || 0;
+                break; // وجدنا دفعة بنفس اليوم، نتوقف عن البحث
+            }
+        }
+
+        // إذا وجدنا دفعة نستخدم الـ ID بتاعها، لو مفيش نعمل ID جديد
+        const batchIdToUse = existingBatchId || push(ref(db, 'batches')).key; 
         
         const perShelf = Math.floor(totalEggs / targetShelvesCount);
         const remainder = totalEggs % targetShelvesCount;
@@ -261,44 +277,33 @@ async function loadIncubatorShelf() {
             updates[`shelf_${shelfNum}`] = { 
                 qty: qtyForThisShelf, 
                 insertDate: dateStr,
-                batchId: newBatchId 
+                batchId: batchIdToUse // ربط الرف بـ ID الدفعة الموحدة
             };
         });
 
+        // 1. تحديث شكل المكنة البصري وخصم البيض من الرصيد
         await update(ref(db, "incubatorGrid"), updates);
         await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs - totalEggs);
 
-        const std = birdStandards['quail']; 
-        const insertD = new Date(dateStr);
-        const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-        const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-        const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
+        // 2. تحديث الدفاتر (الدمج أو الإنشاء)
+        if (existingBatchId) {
+            // لو لقينا دفعة بنفس اليوم، هنزود عدد البيض بتاعها بس (دمج)
+            await update(ref(db, `batches/${existingBatchId}`), {
+                initialEggs: existingInitialEggs + totalEggs
+            });
+            showToast(`تم إضافة الرفوف ودمجها مع دفعة يوم ${dateOnly} 🚀`);
+        } else {
+            // لو مفيش، هنعمل دفعة جديدة خالص
+            const std = birdStandards['quail']; 
+            const insertD = new Date(dateStr);
+            const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
+            const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
+            const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
 
-        let batchNameExt = targetShelvesCount > 1 ? ` (مجمعة ${targetShelvesCount} أرفف)` : '';
-
-        await set(ref(db, `batches/${newBatchId}`), { 
-            name: 'دفعة ' + dateStr.split('T')[0] + batchNameExt, 
-            birdType: 'quail', 
-            insertDate: dateStr, 
-            hatcherDate: hatcherD.toISOString(), 
-            hatchDate: hatchD.toISOString(), 
-            rearDate: rearD.toISOString(), 
-            initialEggs: totalEggs, 
-            status: 'incubator', 
-            totalDead: 0, 
-            totalFeed: 0,
-            createdAt: Date.now()
-        });
-
-        showToast(`تم توزيع الدفعة بنجاح على ${targetShelvesCount} أرفف! 🚀`);
-        closeModal('modalShelfSetup');
-    } catch (error) {
-        console.error(error);
-        showToast("حدث خطأ أثناء تحميل المكنة.", true);
-    } finally {
-        toggleLoader(false);
-    }
-}
+            await set(ref(db, `batches/${batchIdToUse}`), { 
+                name: 'دفعة ' + dateOnly, 
+                birdType: 'quail', 
+                insertDate:
 
 async function emptyShelf(shelfNum) {
     if(confirm(`هل أنت متأكد من تفريغ الرف رقم ${shelfNum}؟`)) {
