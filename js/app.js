@@ -1290,7 +1290,7 @@ function renderBatches() {
 
                 <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
                     <div style="display:flex; gap:5px;">
-                        <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger); background:none; border:none; font-size:18px;">🗑️</button>
+                        <button onclick="promptArchiveBatch('${id}')" title="تصفية وأرشفة للبيانات المالية" style="color: var(--success); background:none; border:none; font-size:22px;"><i class="fas fa-box-archive"></i></button>
                     </div>
                     <div style="display:flex; gap:8px;">
                         <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع ↩️</button>
@@ -1999,4 +1999,153 @@ window.emptyShelf = async (shelfNum) => {
             showToast("تم تفريغ الرف وهو الآن جاهز لدفعة جديدة.");
         } catch(e) { console.error(e); }
     }
+};
+// =====================================================================
+// === 11. النظام المالي المركزي المستقل (التقفيل الشهري والأرشفة) ===
+// =====================================================================
+
+let cumulativeBalance = 0;
+let currentMonthRevenue = 0;
+let currentMonthExpenses = 0;
+let archivedBatchesList = {};
+
+// 1. استدعاء بيانات المركز المالي وعرضها
+onValue(ref(db, "financialCenter"), (snapshot) => {
+    if(snapshot.exists()) {
+        const data = snapshot.val();
+        cumulativeBalance = data.cumulativeBalance || 0;
+        currentMonthRevenue = data.currentMonthRevenue || 0;
+        currentMonthExpenses = data.currentMonthExpenses || 0;
+        
+        // تحديث الشاشة
+        const balEl = document.getElementById('cumulativeBalanceDisplay');
+        const revEl = document.getElementById('currentMonthRevenue');
+        const expEl = document.getElementById('currentMonthExpenses');
+        
+        if(balEl) {
+            balEl.innerText = cumulativeBalance + " ج.م";
+            // لو الرصيد بالسالب (مديونية) خليه باللون الأحمر الفاتح
+            balEl.style.color = cumulativeBalance < 0 ? "#ff9999" : "#ffffff";
+        }
+        if(revEl) revEl.innerText = currentMonthRevenue + " ج.م";
+        if(expEl) expEl.innerText = currentMonthExpenses + " ج.م";
+    }
+});
+
+// استدعاء أرشيف الدفعات
+onValue(ref(db, "archivedBatches"), (snapshot) => {
+    archivedBatchesList = snapshot.exists() ? snapshot.val() : {};
+    if(typeof renderArchivedBatches === 'function') renderArchivedBatches();
+});
+
+// 2. دالة فتح نافذة الأرشفة (بديلة الحذف)
+window.promptArchiveBatch = (id) => {
+    const el = document.getElementById('archiveBatchId');
+    if(el) el.value = id;
+    document.getElementById('archiveRevenue').value = '';
+    openModal('modalArchiveBatch');
+};
+
+// 3. دالة تأكيد التصفية والأرشفة (السحر المحاسبي)
+window.confirmArchiveBatch = async () => {
+    try {
+        const id = document.getElementById('archiveBatchId').value;
+        const revenue = parseFloat(document.getElementById('archiveRevenue').value) || 0;
+        
+        if(revenue <= 0) return showToast("برجاء إدخال مبلغ الإيراد بشكل صحيح!", true);
+        
+        const b = allBatches[id];
+        if(!b) return showToast("خطأ في قراءة الدفعة", true);
+
+        // إضافة الإيراد لعداد الشهر الحالي
+        await set(ref(db, "financialCenter/currentMonthRevenue"), currentMonthRevenue + revenue);
+        
+        // نقل الدفعة للأرشيف وتغليفها
+        b.status = 'archived';
+        b.finalRevenue = revenue;
+        b.archiveDate = new Date().toISOString().split('T')[0];
+        await set(ref(db, `archivedBatches/${id}`), b);
+        
+        // مسح الدفعة من العنابر النشطة عشان تنضف الشاشة
+        await remove(ref(db, `batches/${id}`));
+        
+        closeModal('modalArchiveBatch');
+        showToast("تم تصفية الدفعة وأرشفتها وترحيل أموالها بنجاح 📦");
+    } catch(e) {
+        console.error("خطأ في الأرشفة:", e);
+        showToast("حدث خطأ أثناء الأرشفة", true);
+    }
+};
+
+// 4. دالة تقفيل الشهر (يتم استدعاءها يوم 30 في الشهر)
+window.closeMonth = async () => {
+    if(!confirm("هل أنت متأكد من تقفيل الشهر الحالي؟\nسيتم ترحيل الصافي للرصيد التراكمي وتصفير عدادات الشهر الحالي للبدء من جديد.")) return;
+    
+    try {
+        const netProfit = currentMonthRevenue - currentMonthExpenses;
+        const newBalance = cumulativeBalance + netProfit;
+        
+        // ترحيل الرصيد وتصفير عدادات الإيرادات والمصروفات
+        await update(ref(db, "financialCenter"), {
+            cumulativeBalance: newBalance,
+            currentMonthRevenue: 0,
+            currentMonthExpenses: 0
+        });
+        
+        // أرشفة دفتر المصروفات القديم وتنظيفه
+        const ledgerSnap = await get(ref(db, "ledger"));
+        if(ledgerSnap.exists()) {
+            const oldLedger = ledgerSnap.val();
+            await update(ref(db, "archivedLedger"), oldLedger);
+            await remove(ref(db, "ledger"));
+        }
+        
+        showToast(netProfit >= 0 ? `تم التقفيل! تمت إضافة أرباح ${netProfit} ج.م للرصيد الحر 💰` : `تم التقفيل! هناك عجز مقداره ${Math.abs(netProfit)} ج.م هذا الشهر 📉`);
+    } catch(e) {
+        console.error(e);
+        showToast("حدث خطأ في تقفيل الشهر", true);
+    }
+};
+
+// 5. تعديل دالة تسجيل المصروفات عشان تسمّع في عداد مصروفات الشهر
+window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
+    try {
+        const amount = amountOverride || parseFloat(document.getElementById('eAmount')?.value);
+        const desc = descOverride || document.getElementById('eType')?.value;
+        const batchId = 'general'; // كل المصاريف هنا بتنزل كمصروف عام
+        if(!amount) return showToast("أدخل المبلغ", true);
+
+        // تسجيل في الدفتر للتوثيق
+        await push(ref(db, 'ledger'), { type: 'out', amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+        
+        // تسميع في عداد مصروفات الشهر الحالي
+        await set(ref(db, "financialCenter/currentMonthExpenses"), currentMonthExpenses + amount);
+        
+        if(!amountOverride) { closeModal('modalExpense'); showToast("تم تسجيل المصروف بنجاح 💸"); }
+    } catch(e) { console.error(e); }
+};
+
+// 6. عرض أرشيف الدفعات المصفاة
+window.renderArchivedBatches = () => {
+    const list = document.getElementById('archivedBatchesList');
+    if(!list) return;
+    list.innerHTML = '';
+    
+    let html = '';
+    Object.keys(archivedBatchesList).sort((a,b) => new Date(archivedBatchesList[b].archiveDate) - new Date(archivedBatchesList[a].archiveDate)).forEach(id => {
+        const b = archivedBatchesList[id];
+        html += `<div style="background: var(--bg-main); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-right: 4px solid var(--success);">
+            <div>
+                <strong style="font-size: 16px; color: var(--text-primary);">${b.name}</strong><br>
+                <span style="font-size: 12px; color: var(--text-secondary);">تاريخ الأرشفة: ${b.archiveDate || '-'}</span>
+            </div>
+            <div style="text-align: left; background: rgba(34, 197, 94, 0.1); padding: 5px 12px; border-radius: 8px;">
+                <span style="font-size: 11px; color: var(--text-secondary);">إيراد الدفعة</span><br>
+                <strong style="color: var(--success); font-size: 18px;">${b.finalRevenue || 0} ج.م</strong>
+            </div>
+        </div>`;
+    });
+    
+    if(!html) html = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد دفعات مصفاة في الأرشيف حتى الآن.</div>';
+    list.innerHTML = html;
 };
