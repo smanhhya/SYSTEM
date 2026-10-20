@@ -1,2002 +1,931 @@
-import { db, ref, set, get, push, update, remove, onValue } from './firebase.js';
-import { switchPage, openModal, closeModal, showToast, toggleFab } from './ui.js';
-// استدعاء أدوات Firestore لكي تتمكن المزرعة من التحدث مع الـ CRM
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// إعدادات قاعدة بيانات الـ CRM (المبيعات)
-const crmFirebaseConfig = { 
-    apiKey: "AIzaSyD7ZJP8n8fhMewPfEsTBANn0h9To_q15BY", 
-    authDomain: "sman-ca8f8.firebaseapp.com", 
-    projectId: "sman-ca8f8", 
-    storageBucket: "sman-ca8f8.firebasestorage.app", 
-    messagingSenderId: "538778803310", 
-    appId: "1:538778803310:web:5eeff42bae534375a21a7f" 
-};
-
-// تهيئة الـ CRM كتطبيق ثانوي داخل نظام المزرعة لعدم التعارض
-const crmApp = initializeApp(crmFirebaseConfig, "CRM_System");
-const crmDb = getFirestore(crmApp);
-
-let allBatches = {};
-let allTransactions = {};
-let allFreezerLogs = {};
-let manualCash = 0; 
-let currentFeedStock = 0; 
-let dynamicFreezerConfig = {}; 
-let equipmentInventory = {}; // متغير الجرد ورأس المال الثابت
-
-let currentLedgerFilter = 'all'; 
-let currentLedgerSearch = '';
-
-const birdStandards = {
-    quail: { name: 'سمان', icon: '🕊️', hatcher: 15, hatch: 18, slaughter: 40 },
-    chicken: { name: 'فراخ بيضاء', icon: '🐔', hatcher: 18, hatch: 21, slaughter: 40 },
-    turkey: { name: 'رومي', icon: '🦃', hatcher: 25, hatch: 28, slaughter: 90 }
-};
-
-let globalSettings = { 
-    birdType: 'quail', feedPrice: 30, quailChick: 3.5, chickenChick: 25, turkeyChick: 60, turkeyEgg: 10 
-};
-
-// ================= 1. التبديل والواجهة =================
-window.switchPage = (pageId) => {
-    document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
-    const targetPage = document.getElementById(pageId);
-    if(targetPage) targetPage.classList.add('active');
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>نظام إدارة المزارع - ERP الشامل</title>
     
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    if (window.event && window.event.currentTarget) {
-        window.event.currentTarget.classList.add('active');
-    }
-};
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="إدارة سمان ههيا">
+    <meta name="theme-color" content="#2563eb">
 
-window.switchSettingsTab = (tabId, element) => {
-    document.querySelectorAll('.settings-nav-item').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.settings-tab').forEach(el => el.classList.remove('active'));
-    element.classList.add('active');
-    document.getElementById(`tab-${tabId}`).classList.add('active');
-};
+    <script>
+        const savedTheme = localStorage.getItem('saman_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
 
-window.autoCalcDates = () => {
-    const type = document.getElementById('bBirdType')?.value || 'quail';
-    const dateStr = document.getElementById('bDate')?.value;
-    if(!dateStr) return;
-    
-    const std = birdStandards[type] || birdStandards['quail'];
-    const insertD = new Date(dateStr);
-    
-    const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-    const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-    
-    let slDays = parseInt(document.getElementById('bSlaughterDays')?.value) || std.slaughter;
-    const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (slDays * 24));
-    
-    const formatForInput = (d) => {
-        const pad = (n) => n.toString().padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    };
-    
-    if(document.getElementById('bHatcherDate')) document.getElementById('bHatcherDate').value = formatForInput(hatcherD);
-    if(document.getElementById('bHatchDate')) document.getElementById('bHatchDate').value = formatForInput(hatchD);
-    if(document.getElementById('bSlaughterDate')) document.getElementById('bSlaughterDate').value = formatForInput(rearD);
-};
-
-window.openModal = (id) => {
-    const modalEl = document.getElementById(id);
-    if(modalEl) {
-        modalEl.querySelectorAll('input[type="number"], input[type="text"]').forEach(input => {
-            if(input.id !== 'bHatcherDate' && input.id !== 'bHatchDate' && input.id !== 'bSlaughterDate') {
-                input.value = '';
-            }
-        });
-    }
-
-    if(id === 'modalBatch') {
-        const typeEl = document.getElementById('bBirdType');
-        if(typeEl) typeEl.value = globalSettings.birdType || 'quail';
-        const dateEl = document.getElementById('bDate');
-        if(dateEl) {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            dateEl.value = now.toISOString().slice(0,16);
+    <style>
+        /* ================= 1. DESIGN SYSTEM VARIABLES ================= */
+        :root {
+            --bg-main: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+            --primary: #2563eb; --primary-hover: #1d4ed8;
+            --text-primary: #0f172a; --text-secondary: #64748b;
+            --success: #16a34a; --warning: #d97706; --danger: #dc2626; --info: #0284c7;
+            --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 16px; --space-xl: 24px; --space-xxl: 32px;
+            --radius-card: 16px; --radius-btn: 12px; --radius-input: 12px;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --transition-smooth: all 0.25s ease-out;
         }
-        setTimeout(window.autoCalcDates, 50); 
-    } 
-    openModal(id); 
-};
 
-window.closeModal = closeModal;
-window.toggleFab = toggleFab;
-window.showToast = showToast;
-
-// ================= 2. المظهر =================
-const savedTheme = localStorage.getItem('erp_theme') || 'light';
-const savedColor = localStorage.getItem('erp_primary_color') || '#2563eb';
-document.documentElement.setAttribute('data-theme', savedTheme);
-document.documentElement.style.setProperty('--primary', savedColor);
-
-window.setThemeMode = (mode, el) => {
-    document.documentElement.setAttribute('data-theme', mode);
-    localStorage.setItem('erp_theme', mode);
-    if(el) {
-        el.parentElement.querySelectorAll('.theme-option').forEach(s => s.classList.remove('active'));
-        el.classList.add('active');
-    }
-    showToast(mode === 'dark' ? "تم تفعيل الوضع الليلي 🌙" : "تم تفعيل الوضع الفاتح ☀️");
-};
-
-window.setPrimaryColor = (color, el) => {
-    document.documentElement.style.setProperty('--primary', color);
-    localStorage.setItem('erp_primary_color', color);
-    if(el) {
-        el.parentElement.querySelectorAll('.color-circle').forEach(s => s.classList.remove('active'));
-        el.classList.add('active');
-    }
-    showToast("تم تغيير اللون بنجاح 🎨");
-};
-
-// ================= 3. إعدادات الخزنة والمخزن =================
-onValue(ref(db, "inventory/feedStock"), (snapshot) => {
-    currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
-    const feedEl = document.getElementById('feedStockDisplay');
-    if(feedEl) {
-        feedEl.innerHTML = `
-            <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
-                ${currentFeedStock} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
-            </div>`;
-    }
-});
-
-window.editFeedStock = async () => {
-    const newQty = prompt("تعديل رصيد العلف يدوياً (بالكجم):", currentFeedStock);
-    if(newQty !== null && !isNaN(newQty)) {
-        const val = Number(newQty);
-        try {
-            await set(ref(db, "inventory/feedStock"), val);
-            currentFeedStock = val;
-            const feedEl = document.getElementById('feedStockDisplay');
-            if(feedEl) {
-                feedEl.innerHTML = `
-                    <div onclick="editFeedStock()" style="cursor:pointer; display:inline-block; border-bottom: 2px dashed var(--primary); padding-bottom: 2px;">
-                        ${val} <span style="font-size: 16px;">كجم</span> <i class="fas fa-edit" style="font-size: 14px; color: var(--primary);"></i>
-                    </div>`;
-            }
-            showToast("تم تحديث رصيد العلف بنجاح 👍");
-        } catch(err) {
-            console.error(err);
-            showToast("فشل تعديل الرصيد ❌", true);
+        [data-theme="dark"] {
+            --bg-main: #0f172a; --surface: #1e293b; --border: #334155;
+            --text-primary: #e2e8f0; --text-secondary: #94a3b8;
+            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --info: #0ea5e9;
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
         }
-    }
-};
 
-window.buyFeed = async () => {
-    const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
-    const cost = parseFloat(document.getElementById('bfTotalCost')?.value) || 0;
-    if(!qty || !cost) return showToast("برجاء إدخال البيانات", true);
+        body { font-family: 'Cairo', system-ui, sans-serif; margin: 0; padding: 0; background-color: var(--bg-main); color: var(--text-primary); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background-color 0.3s ease, color 0.3s ease; }
 
-    await set(ref(db, "inventory/feedStock"), currentFeedStock + qty);
-    await push(ref(db, 'ledger'), { type: 'out', amount: cost, desc: `شراء علف (${qty} كجم)`, batchId: 'general', date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
-    await set(ref(db, "cashBox"), manualCash - cost);
-    closeModal('modalBuyFeed'); showToast(`تم إضافة ${qty} كجم`);
-};
+        .sidebar { display: none; }
+        .main-content { min-height: 100vh; transition: var(--transition-smooth); }
 
-onValue(ref(db, "cashBox"), (snapshot) => {
-    manualCash = snapshot.exists() ? snapshot.val() : 0;
-    updateCashDisplay();
-});
+        @media (min-width: 768px) {
+            body { display: flex; } .bottom-nav { display: none !important; }
+            .sidebar { display: flex; flex-direction: column; width: 260px; height: 100vh; position: fixed; right: 0; top: 0; background: var(--surface); border-left: 1px solid var(--border); padding: var(--space-xl) var(--space-md); box-sizing: border-box; z-index: 1000; overflow-y: auto; transition: var(--transition-smooth); }
+            .sidebar-logo { font-size: 20px; font-weight: 800; color: var(--text-primary); margin-bottom: var(--space-xl); text-align: center; padding-bottom: var(--space-lg); border-bottom: 1px solid var(--border); }
+            .sidebar .nav-item { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-radius: var(--radius-btn); text-align: right; margin-bottom: var(--space-xs); flex: none; justify-content: flex-start; cursor: pointer; transition: var(--transition-smooth);}
+            .sidebar .nav-item i { margin-bottom: 0; font-size: 18px; width: 24px; text-align: center; }
+            .sidebar .nav-item span { font-size: 14px; }
+            .sidebar .nav-item:hover { background: rgba(148, 163, 184, 0.1); color: var(--text-primary); transform: translateX(-5px); }
+            .sidebar .nav-item.active { background: var(--primary); color: white; transform: none; box-shadow: var(--shadow-soft); }
+            .main-content { flex: 1; margin-right: 260px; padding: var(--space-xl) 5%; }
+            .fab-container { right: 290px; bottom: 30px; } 
+        }
 
-function updateCashDisplay() {
-    const netProfitEl = document.getElementById('netProfit');
-    if (!netProfitEl) return;
-    let cashBoxEl = document.getElementById('customCashBoxDisplay');
-    if (!cashBoxEl) {
-        const container = document.createElement('div');
-        container.innerHTML = `<span style="font-size: 13px; color: var(--text-secondary); display:block; margin-bottom:4px;">💵 الكاش الفعلي بالخزنة الآن:</span><div style="font-size: 26px; font-weight: 800; margin-bottom: 8px; color:var(--warning);" id="customCashBoxDisplay">0 ج.م</div><button onclick="editCashBox()" style="background: transparent; border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold;"><i class="fas fa-edit"></i> تعديل الكاش</button>`;
-        netProfitEl.parentElement.appendChild(container);
-        cashBoxEl = document.getElementById('customCashBoxDisplay');
-    }
-    if (cashBoxEl) cashBoxEl.innerText = manualCash + " ج.م";
-}
+        @media (max-width: 767px) {
+            .main-content { padding-bottom: 90px; }
+            .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); opacity: 0.98; backdrop-filter: blur(10px); display: flex; justify-content: space-around; padding: var(--space-md) var(--space-xs) var(--space-xl) var(--space-xs); z-index: 1000; border-top: 1px solid var(--border); transition: var(--transition-smooth); }
+            .nav-item { text-align: center; color: var(--text-secondary); cursor: pointer; flex: 1; transition: var(--transition-smooth); }
+            .nav-item i { font-size: 20px; margin-bottom: 4px; display: block; }
+            .nav-item span { font-size: 11px; font-weight: 600; }
+            .nav-item.active { color: var(--primary); transform: translateY(-3px); }
+        }
 
-window.editCashBox = async () => {
-    const newCash = prompt("المبلغ الفعلي بالخزنة الآن:", manualCash);
-    if (newCash !== null && !isNaN(newCash) && newCash.trim() !== "") {
-        await set(ref(db, "cashBox"), parseFloat(newCash)); showToast("تم التحديث");
-    }
-};
+        .page-view { display: none; padding: var(--space-lg) 0; animation: fadeIn 0.2s ease-out; }
+        .page-view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .header-title { background: transparent; color: var(--text-primary); padding: var(--space-sm) 0 var(--space-xl) 0; font-size: 24px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); margin-bottom: var(--space-xl); }
+        .card { background: var(--surface); padding: var(--space-xl); border-radius: var(--radius-card); margin-bottom: var(--space-xl); box-shadow: var(--shadow-soft); border: 1px solid var(--border); transition: var(--transition-smooth);}
+        .card-header { font-size: 18px; color: var(--text-primary); font-weight: 700; margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border); padding-bottom: var(--space-sm); display: flex; justify-content: space-between;}
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-lg); }
+        .stat-box { background: var(--bg-main) !important; padding: var(--space-lg); text-align: center; border-radius: var(--radius-btn); font-size: 13px; font-weight: 600; color: var(--text-secondary); border: 1px solid var(--border); transition: var(--transition-smooth);}
+        .stat-box:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: var(--shadow-soft); }
+        .stat-box .num { display: block; font-size: 28px; font-weight: 800; color: var(--text-primary) !important; margin-top: var(--space-xs); }
 
-onValue(ref(db, "settings"), (snapshot) => {
-    if(snapshot.exists()) {
-        globalSettings = { ...globalSettings, ...snapshot.val() };
-        if(document.getElementById('setBirdType')) document.getElementById('setBirdType').value = globalSettings.birdType || 'quail';
-        if(document.getElementById('setFeed')) document.getElementById('setFeed').value = globalSettings.feedPrice;
-        if(document.getElementById('setQuailChick')) document.getElementById('setQuailChick').value = globalSettings.quailChick || 3.5;
-        if(document.getElementById('setChickenChick')) document.getElementById('setChickenChick').value = globalSettings.chickenChick || 25;
-        if(document.getElementById('setTurkeyChick')) document.getElementById('setTurkeyChick').value = globalSettings.turkeyChick || 60;
-        if(document.getElementById('setTurkeyEgg')) document.getElementById('setTurkeyEgg').value = globalSettings.turkeyEgg || 10;
-    }
-});
+        label { font-weight: 600; font-size: 14px; color: var(--text-secondary); display: block; margin-top: var(--space-lg); margin-bottom: var(--space-sm); }
+        input, select { width: 100%; padding: 14px var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-input); box-sizing: border-box; font-size: 14px; font-weight: 500; background: var(--bg-main); color: var(--text-primary); transition: var(--transition-smooth); font-family: 'Cairo', sans-serif;}
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+        button.btn { border: none; padding: 14px var(--space-lg); border-radius: var(--radius-btn); width: 100%; font-size: 16px; cursor: pointer; font-weight: 700; margin-top: var(--space-xl); color: white; display: flex; justify-content: center; align-items: center; gap: var(--space-sm); transition: var(--transition-smooth); font-family: 'Cairo', sans-serif;}
+        button.btn:active { transform: scale(0.98); } button.btn:hover { filter: brightness(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-danger { background: var(--danger); } .btn-info { background: var(--info); } .btn-warning { background: var(--warning); color: #fff; }
 
-window.saveSettings = async () => {
-    const newSet = {
-        birdType: document.getElementById('setBirdType')?.value || 'quail',
-        feedPrice: parseFloat(document.getElementById('setFeed')?.value) || 0,
-        quailChick: parseFloat(document.getElementById('setQuailChick')?.value) || 3.5,
-        chickenChick: parseFloat(document.getElementById('setChickenChick')?.value) || 25,
-        turkeyChick: parseFloat(document.getElementById('setTurkeyChick')?.value) || 60,
-        turkeyEgg: parseFloat(document.getElementById('setTurkeyEgg')?.value) || 10
-    };
-    await set(ref(db, 'settings'), newSet); showToast("تم حفظ إعدادات التشغيل");
-};
+        .batch-card { background: var(--bg-main); border: 1px solid var(--border); padding: var(--space-lg); border-radius: var(--radius-btn); margin-bottom: var(--space-lg); border-right: 4px solid var(--border); transition: var(--transition-smooth);}
+        .batch-card:hover { border-color: var(--text-secondary); transform: translateX(-4px); box-shadow: var(--shadow-soft); }
+        .batch-card.stage-incubator { border-right-color: var(--info); } .batch-card.stage-hatcher { border-right-color: var(--primary); } .batch-card.stage-rearing { border-right-color: var(--warning); } .batch-card.stage-slaughter { border-right-color: var(--danger); } .batch-card.stage-completed { border-right-color: var(--success); }
+        .badge { padding: 4px var(--space-md); border-radius: 6px; font-size: 12px; font-weight: 700; color: white; display: inline-block; }
+        .batch-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }
+        .batch-actions button { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; transition: var(--transition-smooth); }
+        .batch-actions button:hover { background: var(--border); transform: translateY(-2px); }
 
-// ================= 4. الفريزر الديناميكي وتحكم الأصناف =================
-let currentFreezerStock = {};
-onValue(ref(db, "inventory/freezerStock"), (snapshot) => {
-    currentFreezerStock = snapshot.exists() ? snapshot.val() : {};
-    if(typeof window.renderFreezerGrid === 'function') window.renderFreezerGrid();
-});
+        .transaction-item { display: flex; justify-content: space-between; align-items: center; padding: var(--space-md) var(--space-lg); border-radius: 8px; border-bottom: 1px solid var(--border); transition: var(--transition-smooth); background: transparent; }
+        .transaction-item:hover { background: rgba(148, 163, 184, 0.05); padding-right: 24px; border-left: 3px solid var(--primary); }
+        .transaction-item:nth-child(even) { background: rgba(0,0,0,0.02); }
+        [data-theme="dark"] .transaction-item:nth-child(even) { background: rgba(0,0,0,0.15); }
+        .text-success { color: var(--success) !important; } .text-danger { color: var(--danger) !important; }
 
-onValue(ref(db, "inventory/freezerConfig"), async (snapshot) => {
-    if(!snapshot.exists() || Object.keys(snapshot.val()).length === 0) {
-        const defaultCats = {
-            'royal': { name: 'رويال', price: 120 },
-            'jumbo': { name: 'جامبو', price: 90 },
-            'super': { name: 'سوبر', price: 80 }
-        };
-        await set(ref(db, "inventory/freezerConfig"), defaultCats);
-        await set(ref(db, "inventory/freezerStock"), { 'royal':0, 'jumbo':0, 'super':0 });
-        return; 
-    }
+        .theme-toggle-btn { position: fixed; top: 20px; left: 20px; z-index: 2000; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 50%; width: 44px; height: 44px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-soft); transition: var(--transition-smooth); }
+        .theme-toggle-btn:hover { transform: scale(1.1); border-color: var(--primary); }
 
-    dynamicFreezerConfig = snapshot.val();
-    
-    const saleSelect = document.getElementById('sGrade');
-    if(saleSelect) {
-        saleSelect.innerHTML = '<option value="">-- اختر الصنف للبيع --</option>';
-        Object.keys(dynamicFreezerConfig).forEach(id => {
-            saleSelect.innerHTML += `<option value="${id}">${dynamicFreezerConfig[id].name}</option>`;
-        });
-    }
+        .fab-container { position: fixed; bottom: 85px; right: 20px; z-index: 2000; }
+        .fab { background: var(--primary); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: var(--shadow-soft); cursor: pointer; border: none; transition: var(--transition-smooth); }
+        .fab:active { transform: scale(0.9); } .fab:hover { transform: scale(1.05); }
+        .fab-menu { display: none; position: absolute; bottom: 70px; right: 0; background: var(--surface); border-radius: var(--radius-btn); box-shadow: 0 10px 25px rgba(0,0,0,0.15); width: 180px; padding: var(--space-sm); flex-direction: column; gap: var(--space-xs); border: 1px solid var(--border); }
+        [data-theme="dark"] .fab-menu { box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .fab-menu.active { display: flex; animation: slideUp 0.2s ease-out; }
+        .fab-btn { background: transparent; color: var(--text-primary); padding: var(--space-md); border-radius: 8px; font-size: 14px; text-align: right; display: flex; align-items: center; gap: var(--space-sm); border: none; cursor: pointer; font-weight: 600; width: 100%; transition: var(--transition-smooth);}
+        .fab-btn:hover { background: var(--bg-main); padding-right: var(--space-lg); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
 
-    if(typeof window.renderManageCategories === 'function') window.renderManageCategories();
-    if(typeof window.renderFreezerGrid === 'function') window.renderFreezerGrid();
-});
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 2500; justify-content: center; align-items: flex-end; }
+        @media (min-width: 768px) { .modal-overlay { align-items: center; } .modal-content { border-radius: 24px !important; } }
+        .modal-content { background: var(--surface); width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: var(--space-xxl) var(--space-xl); box-sizing: border-box; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.2);}
+        [data-theme="dark"] .modal-content { box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+        .close-modal { position: absolute; left: 20px; top: 20px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-secondary); width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition-smooth);}
+        .close-modal:hover { color: var(--text-primary); background: var(--border); transform: rotate(90deg); }
+        
+        #toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: white; padding: 12px 24px; border-radius: 100px; z-index: 3000; font-weight: 600; font-size: 14px; text-align: center; box-shadow: var(--shadow-soft); }
+        .dates-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); font-size: 12px; margin-top: var(--space-sm); background: var(--bg-main); padding: var(--space-sm); border-radius: 8px; border: 1px solid var(--border);}
+        .result-stamp { padding: var(--space-lg); border-radius: var(--radius-btn); text-align: center; font-size: 18px; font-weight: 800; margin-top: var(--space-lg); border: 2px dashed;}
+        .freezer-log { background: var(--bg-main); border-radius: 10px; padding: 12px; margin-bottom: 10px; border-right: 4px solid var(--info); font-size: 14px; transition: var(--transition-smooth);}
+        .freezer-log:hover { transform: translateX(-4px); background: rgba(148, 163, 184, 0.05);}
+        .freezer-tag-new { background: var(--success); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
+        .freezer-tag-old { background: var(--danger); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px;}
+        
+        /* ================= إصلاحات شاشة الموبايل (طوارئ) ================= */
+        @media (max-width: 767px) {
+            .fab-container { bottom: 110px !important; right: 15px !important; }
+            .header-title { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .header-title div { width: 100%; }
+            .header-title button { width: 100%; padding: 12px !important; font-size: 16px !important; justify-content: center;}
+            .nav-item { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        }
 
-window.renderFreezerGrid = () => {
-    const grid = document.getElementById('freezerGrid');
-    const dashTotal = document.getElementById('dashFreezer');
-    if(!grid) return;
-    
-    grid.innerHTML = ''; let totalCount = 0;
-    
-    if(Object.keys(dynamicFreezerConfig).length === 0) {
-        grid.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:20px; color:var(--text-secondary);">الفريزر فارغ، اضغط على إدارة الأصناف للإضافة.</div>`;
-    } else {
-        Object.keys(dynamicFreezerConfig).forEach(id => {
-            const item = dynamicFreezerConfig[id];
-            const qty = currentFreezerStock[id] || 0;
-            totalCount += qty;
-            
-            grid.innerHTML += `
-                <div class="card" onclick="editFreezerItem('${id}', ${qty}, ${item.price}, '${item.name}')" 
-                     style="cursor:pointer; text-align:center; transition:0.3s; border:1px solid var(--border); padding: 15px; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                    <div style="font-size: 24px; color: var(--primary);">
-                        <i class="fas fa-box-open"></i>
-                    </div>
-                    <h4 style="margin:0; color:var(--text-secondary); font-size:14px;">${item.name}</h4>
-                    <div style="font-size:28px; font-weight:800; color:var(--primary); margin:0;">${qty}</div>
-                    <div style="font-size:12px; color:var(--success); font-weight:bold; background: rgba(22, 163, 74, 0.1); padding: 4px 8px; border-radius: 6px;">
-                        ${item.price} ج.م <i class="fas fa-edit" style="margin-right: 5px;"></i>
-                    </div>
+        /* ================= ستايل مركز التحكم (Settings Layout) ================= */
+        .settings-layout { display: flex; gap: 24px; height: calc(100vh - 120px); background: var(--surface); border-radius: 16px; border: 1px solid var(--border); overflow: hidden; }
+        .settings-sidebar { width: 260px; background: var(--bg-main); border-left: 1px solid var(--border); padding: 20px 0; overflow-y: auto; }
+        .settings-search { margin: 0 16px 20px; position: relative; }
+        .settings-search input { width: 100%; padding: 10px 35px 10px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+        .settings-search i { position: absolute; right: 12px; top: 12px; color: var(--text-secondary); }
+        .settings-group-title { font-size: 11px; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin: 16px 20px 8px; }
+        .settings-nav-item { padding: 10px 20px; color: var(--text-primary); font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s; border-right: 3px solid transparent; }
+        .settings-nav-item:hover { background: rgba(37, 99, 235, 0.05); color: var(--primary); }
+        .settings-nav-item.active { background: rgba(37, 99, 235, 0.1); color: var(--primary); border-right-color: var(--primary); font-weight: bold; }
+        .settings-content-area { flex: 1; padding: 32px; overflow-y: auto; }
+        .settings-tab { display: none; animation: fadeIn 0.3s ease-out; }
+        .settings-tab.active { display: block; }
+        .settings-desc { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+        .settings-card { background: var(--bg-main); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; }
+        .setting-row h4 { margin: 0 0 4px 0; font-size: 15px; }
+        .setting-row span { font-size: 12px; color: var(--text-secondary); }
+        .setting-divider { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+        
+        @media (max-width: 767px) {
+            .settings-layout { flex-direction: column; height: auto; }
+            .settings-sidebar { width: 100%; border-left: none; border-bottom: 1px solid var(--border); max-height: 250px; }
+            .settings-content-area { padding: 16px; }
+            .setting-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .setting-row input, .setting-row select { width: 100% !important; }
+        }
+        
+        /* ================= ستايل قسم المظهر (Appearance) ================= */
+        .theme-option { border: 2px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: var(--surface); }
+        .theme-option:hover { border-color: var(--primary); background: rgba(37, 99, 235, 0.05); transform: translateY(-2px); }
+        .theme-option.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary) inset; }
+        .color-circle { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 3px solid transparent; }
+        .color-circle:hover { transform: scale(1.15); }
+        .color-circle.active { border-color: var(--text-primary); transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        
+        /* ================= تحسينات إضافية للنظام ================= */
+        .btn-sm { padding: 8px 16px !important; font-size: 13px !important; border-radius: 8px !important; width: auto !important; margin-top: 0 !important; }
+        .input-readonly { background-color: rgba(37, 99, 235, 0.05) !important; border: 1px dashed var(--primary) !important; font-weight: bold !important; color: var(--primary) !important; pointer-events: none; }
+        .search-bar-container { display: flex; gap: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+        .search-input { flex: 1.7; padding: 10px 14px; font-size: 13px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; transition: var(--transition-smooth); }
+        .search-select { flex: 1.3; padding: 10px; font-size: 13px; font-weight: bold; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text-primary); box-sizing: border-box; min-width: 0; text-align: center; cursor: pointer; transition: var(--transition-smooth); }
+        .search-input:focus, .search-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); outline: none; }
+    </style>
+</head>
+<body>
+
+    <button class="theme-toggle-btn" onclick="toggleAppTheme()" title="تبديل وضع الألوان">
+        <i id="themeIcon" class="fas fa-moon"></i>
+    </button>
+    <div id="toast"></div>
+
+    <div class="fab-container">
+        <button class="fab" onclick="toggleFab()"><i class="fas fa-bolt"></i></button>
+        <div class="fab-menu" id="fabMenu">
+            <button class="fab-btn" onclick="openModal('modalDaily'); toggleFab()"><i class="fas fa-clipboard-list" style="color: var(--warning);"></i> علف/نافق</button>
+            <button class="fab-btn" onclick="openModal('modalBreederDaily'); toggleFab()"><i class="fas fa-egg" style="color: var(--primary);"></i> فرز الأمهات</button>
+          
+            <button class="fab-btn" onclick="openModal('modalSale'); toggleFab()"><i class="fas fa-shopping-cart" style="color: var(--success);"></i> بيع سريع</button>
+            <button class="fab-btn" onclick="openModal('modalBatch'); toggleFab()"><i class="fas fa-plus-circle" style="color: var(--info);"></i> دفعة جديدة</button>
+        </div>
+    </div>
+
+    <aside class="sidebar">
+        <div class="sidebar-logo"><i class="fas fa-kiwi-bird" style="color: var(--primary);"></i> سمان ههيا</div>
+        <div class="nav-item active" onclick="switchPage('dashboard')"><i class="fas fa-chart-pie"></i><span>الرئيسية</span></div>
+        <div class="nav-item" onclick="switchPage('breeders')"><i class="fas fa-venus-mars"></i><span>أمهات</span></div>
+
+        <div class="nav-item" onclick="switchPage('incubator')"><i class="fas fa-temperature-half"></i><span>المفرخ</span></div>
+        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>عنابر التربية</span></div>
+        <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>المخزون (فريزر)</span></div>
+        <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>الماليات P&L</span></div>
+        <div class="nav-item" onclick="switchPage('inventory')"><i class="fas fa-boxes"></i><span>جرد المعدات</span></div>
+        <div style="flex: 1;"></div>
+        <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>الإعدادات</span></div>
+    </aside>
+
+    <nav class="bottom-nav">
+        <div class="nav-item active" onclick="switchPage('dashboard')"><i class="fas fa-chart-pie"></i><span>الرئيسية</span></div>
+        <div class="nav-item" onclick="switchPage('incubator')"><i class="fas fa-temperature-half"></i><span>تفريخ</span></div>
+        <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>تربية</span></div>
+        <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>فريزر</span></div>
+        <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>حسابات</span></div>
+        <div class="nav-item" onclick="switchPage('inventory')"><i class="fas fa-boxes"></i><span>جرد</span></div>
+        <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>إعدادات</span></div>
+    </nav>
+
+    <div class="main-content">
+        
+        <div id="dashboard" class="page-view active">
+            <div class="header-title"><span>لوحة القيادة</span><div><button class="btn btn-primary btn-sm" onclick="openModal('modalBatch')"><i class="fas fa-plus"></i> إضافة دفعة</button></div></div>
+
+            <div class="card">
+                <div class="grid-2">
+                    <button class="btn btn-warning" onclick="openModal('modalDaily')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-clipboard-list"></i> علف/نافق</button>
+                    <button class="btn btn-success" onclick="openModal('modalSale')" style="margin-top:0; padding:12px; font-size:14px;"><i class="fas fa-shopping-cart"></i> بيع مباشر</button>
                 </div>
-            `;
-        });
-    }
-    if(dashTotal) dashTotal.innerText = totalCount;
-};
-
-window.editFreezerItem = (id, currentStock, currentPrice, name) => {
-    const newQtyStr = prompt(`تعديل رصيد صنف (${name}):`, currentStock);
-    if(newQtyStr === null) return; 
-    
-    const newPriceStr = prompt(`تعديل سعر صنف (${name}) بالجنيه:`, currentPrice);
-    if(newPriceStr === null) return; 
-
-    const newQty = parseInt(newQtyStr) || 0;
-    const newPrice = parseFloat(newPriceStr) || 0;
-
-    update(ref(db, `inventory/freezerStock`), { [id]: newQty });
-    update(ref(db, `inventory/freezerConfig/${id}`), { price: newPrice });
-    showToast("تم التعديل بنجاح 👍");
-};
-
-window.renderManageCategories = () => {
-    const container = document.getElementById('freezerCategoriesList');
-    if(!container) return;
-    container.innerHTML = '';
-    
-    if(Object.keys(dynamicFreezerConfig).length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:#777;">لا توجد أصناف مضافة حالياً.</p>'; return;
-    }
-
-    for (const [id, cat] of Object.entries(dynamicFreezerConfig)) {
-        container.innerHTML += `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); background: var(--surface); margin-bottom: 5px; border-radius: 5px;">
-                <div>
-                    <strong style="font-size: 16px; color: var(--text-primary);">${cat.name}</strong> 
-                    <span style="color: var(--success); font-size: 14px;">(السعر: ${cat.price})</span>
-                </div>
-                <button class="btn btn-danger" onclick="deleteFreezerCategory('${id}')" style="padding: 5px 10px; font-size: 12px; margin:0; width:auto;">🗑️ حذف</button>
-            </div>
-        `;
-    }
-};
-
-window.addCategoryFromMaster = async () => {
-    try {
-        const nameInput = document.getElementById('masterCatName');
-        const priceInput = document.getElementById('masterCatPrice');
-        if(!nameInput || !priceInput) return;
-
-        const name = nameInput.value.trim();
-        const price = priceInput.value || 0;
-        
-        if (!name) return showToast("يرجى كتابة اسم الصنف!", true);
-
-        const newId = 'cat_' + Date.now();
-        await set(ref(db, `inventory/freezerConfig/${newId}`), { name: name, price: Number(price) });
-        await set(ref(db, `inventory/freezerStock/${newId}`), 0);
-
-        nameInput.value = ''; priceInput.value = '';
-        showToast("تمت إضافة الصنف بنجاح!");
-    } catch (e) {
-        console.error(e);
-    }
-};
-
-window.deleteFreezerCategory = async (id) => {
-    if(confirm("هل أنت متأكد من حذف هذا الصنف؟ \nسيختفي من القوائم.")) {
-        await remove(ref(db, `inventory/freezerConfig/${id}`));
-        await remove(ref(db, `inventory/freezerStock/${id}`));
-        showToast("تم الحذف بنجاح");
-    }
-};
-
-let isDeleteLogMode = false;
-window.toggleLogDeletion = () => {
-    isDeleteLogMode = !isDeleteLogMode;
-    if(typeof window.renderFreezerLogs === 'function') window.renderFreezerLogs(); 
-};
-
-window.deleteFreezerLog = async (logId) => {
-    if(confirm("هل أنت متأكد من حذف هذا السجل؟ (هذا الإجراء لا يعدل الرصيد، يحذف السجل فقط)")) {
-        await remove(ref(db, `inventory/freezerLogs/${logId}`));
-        showToast("تم حذف السجل");
-    }
-};
-
-onValue(ref(db, "inventory/freezerLogs"), (snapshot) => {
-    allFreezerLogs = snapshot.exists() ? snapshot.val() : {}; 
-    window.renderFreezerLogs();
-});
-
-window.renderFreezerLogs = () => {
-    const el = document.getElementById('freezerLogs');
-    if(!el) return;
-    let html = ''; const now = new Date();
-    
-    Object.keys(allFreezerLogs).sort((a,b)=> new Date(allFreezerLogs[b].dateAdded) - new Date(allFreezerLogs[a].dateAdded)).forEach(key => {
-        const log = allFreezerLogs[key]; 
-        const daysOld = Math.floor((now - new Date(log.dateAdded)) / 86400000);
-        let ageTag = daysOld <= 7 ? '<span class="freezer-tag-new" style="background:var(--success); color:white; padding:2px 6px; border-radius:4px; font-size:10px;">جديد</span>' : `<span style="font-size:11px;color:var(--text-secondary);">منذ ${daysOld} يوم</span>`;
-        
-        const safeItems = log.items || {};
-        let itemsStr = Object.keys(safeItems).filter(k => safeItems[k]>0).map(k => `${dynamicFreezerConfig[k]?.name || k}: ${safeItems[k]}`).join(' | ');
-        
-        if(!itemsStr) itemsStr = 'لم يتم تحديد أصناف وقت الذبح';
-
-        let delBtn = isDeleteLogMode ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 10px; width:auto; margin:0;" onclick="deleteFreezerLog('${key}')">حذف</button>` : '';
-
-        html += `<div class="freezer-log" style="background:var(--bg-main); padding:12px; border-radius:8px; margin-bottom:8px; border-left:4px solid var(--info);">
-            <div style="display:flex; justify-content:space-between; margin-bottom:5px; align-items:center;">
-                <div><strong>${log.batchName}</strong> ${ageTag}</div>
-                ${delBtn}
-            </div>
-            <div style="color:var(--text-secondary); font-size:12px; margin-bottom:5px;">تاريخ التخزين: ${log.dateAdded}</div>
-            <div style="font-weight:bold; color:var(--primary); font-size:13px;">${itemsStr}</div>
-        </div>`;
-    });
-    
-    el.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
-};
-
-// ================= 4.5 جرد المعدات (رأس المال الثابت) =================
-onValue(ref(db, "inventory/equipment"), (snapshot) => {
-    equipmentInventory = snapshot.exists() ? snapshot.val() : {};
-    if(typeof window.renderInventoryList === 'function') window.renderInventoryList();
-});
-
-window.renderInventoryList = () => {
-    const listEl = document.getElementById('inventoryList');
-    const dashTotalEl = document.getElementById('dashInventoryTotal');
-    const pageTotalEl = document.getElementById('inventoryTotalValue');
-    
-    if(!listEl) return;
-    
-    let html = '';
-    let totalCapital = 0;
-
-    if(Object.keys(equipmentInventory).length === 0) {
-        html = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد معدات مضافة حتى الآن.</div>';
-    } else {
-        Object.keys(equipmentInventory).forEach(id => {
-            const item = equipmentInventory[id];
-            const itemTotal = (item.qty || 0) * (item.price || 0);
-            totalCapital += itemTotal;
-            
-            html += `
-            <div style="background: var(--surface); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s;" onmouseover="this.style.borderColor='var(--info)'" onmouseout="this.style.borderColor='var(--border)'">
-                <div>
-                    <strong style="font-size: 16px; color: var(--text-primary);">${item.name}</strong>
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-top: 5px;">
-                        السعر: ${item.price} ج.م | الإجمالي: <span style="color: var(--info); font-weight: bold;">${itemTotal} ج.م</span>
-                    </div>
-                </div>
-                
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="display: flex; flex-direction: column; align-items: center; background: var(--bg-main); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);">
-                        <span style="font-size: 10px; color: var(--text-secondary);">العدد</span>
-                        <strong style="font-size: 18px; color: var(--primary);">${item.qty}</strong>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <button class="btn btn-success" style="padding: 4px 10px; font-size: 12px; margin: 0; width: auto;" onclick="updateInventoryItemQty('${id}', 1)" title="إضافة جديد">+</button>
-                        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 12px; margin: 0; width: auto;" onclick="updateInventoryItemQty('${id}', -1)" title="هالك / تالف">-</button>
-                    </div>
-                    <button class="btn" style="background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 8px; margin: 0; width: auto;" onclick="deleteInventoryItem('${id}')" title="حذف الصنف نهائياً"><i class="fas fa-trash"></i></button>
-                </div>
-            </div>`;
-        });
-    }
-    
-    listEl.innerHTML = html;
-    if(dashTotalEl) dashTotalEl.innerText = totalCapital;
-    if(pageTotalEl) pageTotalEl.innerText = totalCapital + " ج.م";
-};
-
-window.addOrUpdateInventoryItem = async () => {
-    try {
-        const nameEl = document.getElementById('invItemName');
-        const qtyEl = document.getElementById('invItemQty');
-        const priceEl = document.getElementById('invItemPrice');
-        
-        const name = nameEl ? nameEl.value.trim() : '';
-        const qty = qtyEl ? parseInt(qtyEl.value) || 0 : 0;
-        const price = priceEl ? parseFloat(priceEl.value) || 0 : 0;
-        
-        if(!name) return showToast("برجاء كتابة اسم الصنف!", true);
-        if(qty <= 0) return showToast("العدد يجب أن يكون أكبر من صفر!", true);
-        if(price < 0) return showToast("السعر غير صحيح!", true);
-        
-        const newId = 'eq_' + Date.now();
-        await set(ref(db, `inventory/equipment/${newId}`), { name, qty, price });
-        
-        if(nameEl) nameEl.value = '';
-        if(qtyEl) qtyEl.value = '';
-        if(priceEl) priceEl.value = '';
-        
-        closeModal('modalManageInventory');
-        showToast("تمت إضافة الصنف للجرد بنجاح 🛠️");
-    } catch (error) {
-        console.error("خطأ في حفظ الصنف:", error);
-        showToast("حدث خطأ أثناء الحفظ! تأكد من إدخال البيانات", true);
-    }
-};
-
-window.updateInventoryItemQty = async (id, change) => {
-    try {
-        const item = equipmentInventory[id];
-        if(!item) return;
-        
-        const newQty = item.qty + change;
-        if(newQty < 0) return showToast("لا يمكن أن يكون العدد بالسالب!", true);
-        
-        await update(ref(db, `inventory/equipment/${id}`), { qty: newQty });
-        
-        if(change < 0) {
-            showToast("تم تسجيل هالك وخصم القيمة من رأس المال 📉");
-        } else {
-            showToast("تمت الزيادة بنجاح 📈");
-        }
-    } catch(e) {
-        console.error(e);
-    }
-};
-
-window.deleteInventoryItem = async (id) => {
-    if(confirm("هل أنت متأكد من حذف هذا الصنف نهائياً من الجرد؟")) {
-        try {
-            await remove(ref(db, `inventory/equipment/${id}`));
-            showToast("تم الحذف بنجاح");
-        } catch(e) {
-            console.error(e);
-        }
-    }
-};
-
-// ================= 5. الدفعات والذبح الديناميكي =================
-window.saveNewBatch = async () => {
-    try {
-        const name = document.getElementById('bName')?.value || '';
-        const eggs = parseInt(document.getElementById('bEggs')?.value) || 0;
-        const datetimeStr = document.getElementById('bDate')?.value || ''; 
-        const bType = document.getElementById('bBirdType')?.value || 'quail';
-        
-        const hatcherD = document.getElementById('bHatcherDate')?.value;
-        const hatchD = document.getElementById('bHatchDate')?.value;
-        const rearD = document.getElementById('bSlaughterDate')?.value;
-        
-        if(!name || !eggs || !datetimeStr || !hatcherD || !hatchD || !rearD) return showToast("أكمل البيانات والتواريخ المتوقعة", true);
-
-        const newBatchRef = push(ref(db, 'batches'));
-        await set(newBatchRef, { 
-            name, birdType: bType, 
-            insertDate: datetimeStr, 
-            hatcherDate: new Date(hatcherD).toISOString(), 
-            hatchDate: new Date(hatchD).toISOString(), 
-            rearDate: new Date(rearD).toISOString(), 
-            initialEggs: eggs, status: 'incubator', totalDead: 0, totalFeed: 0,
-            order: Date.now()
-        });
-        
-        closeModal('modalBatch'); 
-        showToast(`تم تسجيل الدفعة بنجاح بالمفرخ!`);
-    } catch(e) {
-        console.error(e);
-    }
-};
-
-window.openEditBatch = (id) => {
-    try {
-        const b = allBatches[id];
-        if(!b) return;
-        
-        const idEl = document.getElementById('editBatchId');
-        const nameEl = document.getElementById('editBName');
-        const eggsEl = document.getElementById('editBEggs');
-        const dateEl = document.getElementById('editBDate');
-        
-        if(idEl) idEl.value = id;
-        if(nameEl) nameEl.value = b.name || '';
-        if(eggsEl) eggsEl.value = b.initialEggs || 0;
-        if(dateEl && b.insertDate) dateEl.value = b.insertDate;
-        
-        openModal('modalEditBatch');
-    } catch(e) {
-        console.error(e);
-    }
-};
-
-window.saveEditBatch = async () => {
-    try {
-        const idEl = document.getElementById('editBatchId');
-        if(!idEl) return;
-        const id = idEl.value;
-        const b = allBatches[id];
-        if(!b) return;
-        
-        const newName = document.getElementById('editBName')?.value;
-        const newEggs = parseInt(document.getElementById('editBEggs')?.value) || 0;
-        const newDateStr = document.getElementById('editBDate')?.value;
-        
-        if(!newName || !newEggs || !newDateStr) return showToast("أكمل البيانات", true);
-
-        const std = birdStandards[b.birdType || 'quail'];
-        const insertD = new Date(newDateStr);
-        
-        let updateData = { name: newName, initialEggs: newEggs, insertDate: newDateStr };
-
-        if (b.status === 'incubator' || b.status === 'hatcher') {
-            const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-            const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-            const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
-            
-            updateData.hatcherDate = hatcherD.toISOString();
-            updateData.hatchDate = hatchD.toISOString();
-            updateData.rearDate = rearD.toISOString();
-        } 
-        else if (b.status === 'rearing') {
-            const customSlaughterAge = parseInt(document.getElementById('editSlaughterAge')?.value);
-            const customSlaughterDate = document.getElementById('editSlaughterDate')?.value;
-            
-            if(customSlaughterAge) updateData.slaughterAge = customSlaughterAge;
-            if(customSlaughterDate) updateData.rearDate = new Date(customSlaughterDate).toISOString();
-        }
-
-        await update(ref(db, `batches/${id}`), updateData);
-        closeModal('modalEditBatch'); showToast("تم تحديث الدفعة");
-    } catch(e) {
-        console.error(e);
-    }
-};
-
-window.updateStage = async (id, stage) => { 
-    try {
-        if (stage === 'slaughter' && !confirm("⚠️ هل أنت متأكد من نقل الدفعة للذبح؟")) return;
-        await update(ref(db, `batches/${id}`), { status: stage }); 
-        showToast("تم تحديث الحالة");
-    } catch(e) { console.error(e); }
-};
-
-window.deleteBatch = async (id) => { 
-    if(confirm("هل أنت متأكد من الحذف؟")) { 
-        try {
-            await remove(ref(db, `batches/${id}`)); 
-            showToast("تم الحذف"); 
-        } catch(e) { console.error(e); }
-    } 
-};
-
-window.promptHatch = (id) => { 
-    try {
-        const el = document.getElementById('hatchBatchId'); 
-        if(el) el.value = id; 
-        
-        const b = allBatches[id];
-        if(!b) return;
-        
-        if (b && b.hatchDate) {
-            const hatchDateObj = new Date(b.hatchDate);
-            const dateOnly = hatchDateObj.toISOString().split('T')[0];
-
-            const nameInput = document.getElementById('hNewBatchName');
-            if(nameInput) nameInput.value = 'تربية ' + dateOnly;
-
-            const slaughterAge = 40; 
-            const slaughterDateObj = new Date(hatchDateObj);
-            slaughterDateObj.setDate(slaughterDateObj.getDate() + slaughterAge);
-
-            const formatForInput = (d) => {
-                const pad = (n) => n.toString().padStart(2, '0');
-                return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            };
-
-            const slaughterInput = document.getElementById('hExpectedSlaughterDate');
-            if(slaughterInput) slaughterInput.value = formatForInput(slaughterDateObj);
-
-            const ageInput = document.getElementById('hSlaughterAge');
-            if(ageInput) ageInput.value = slaughterAge;
-
-            const rearingDateInput = document.getElementById('hRearingDate');
-            if(rearingDateInput) {
-                rearingDateInput.value = formatForInput(hatchDateObj);
-                rearingDateInput.setAttribute('readonly', 'true');
-                rearingDateInput.style.pointerEvents = 'none'; 
-                rearingDateInput.style.opacity = '0.6'; 
-            }
-        }
-        
-        openModal('modalHatch'); 
-    } catch(e) { console.error(e); }
-};
-
-window.moveToRearing = async () => {
-    try {
-        const idEl = document.getElementById('hatchBatchId');
-        if(!idEl) return;
-        const id = idEl.value;
-        
-        const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
-        const unfert = parseInt(document.getElementById('hUnfert')?.value) || 0;
-        const dead = parseInt(document.getElementById('hDead')?.value) || 0;
-        const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
-        
-        if(!id || healthy < 0) return showToast("أدخل أرقاماً صحيحة", true);
-        
-        const b = allBatches[id];
-        if(!b) return;
-        
-        const initialEggs = b.initialEggs || 0;
-        const totalOut = healthy + unfert + dead;
-
-        if (totalOut > initialEggs) {
-            return showToast(`❌ مجموع المخرجات (${totalOut}) أكبر من البيض المدخل!`, true);
-        }
-
-        const hatchDateObj = new Date(b.hatchDate);
-        const std = birdStandards[b.birdType || 'quail'];
-        const autoSlaughterAge = std ? std.slaughter : 35; 
-        
-        const autoSlaughterDateObj = new Date(hatchDateObj);
-        autoSlaughterDateObj.setDate(autoSlaughterDateObj.getDate() + autoSlaughterAge);
-
-        const slaughterDay = autoSlaughterDateObj.getDate();
-        const slaughterMonth = autoSlaughterDateObj.getMonth() + 1;
-        const autoNewName = `دفعة ${slaughterDay}/${slaughterMonth}`;
-
-        let expectedPairs = Math.floor((healthy - 50) / 2);
-        if (expectedPairs < 0) expectedPairs = 0;
-
-        const safeSlaughterAgeForCustomer = autoSlaughterAge + 5;
-
-        let unitPrice = 0;
-        if(b.birdType === 'quail') unitPrice = globalSettings.quailChick || 0;
-        else if(b.birdType === 'chicken') unitPrice = globalSettings.chickenChick || 0;
-        else if(b.birdType === 'turkey') unitPrice = 0;
-
-        const totalChickCost = healthy * unitPrice;
-        const hatchRate = initialEggs > 0 ? ((healthy / initialEggs) * 100).toFixed(1) : 0;
-        
-        await update(ref(db, `batches/${id}`), { 
-            name: autoNewName,                           
-            rearDate: autoSlaughterDateObj.toISOString(),
-            slaughterAge: autoSlaughterAge,              
-            status: 'rearing', 
-            hatchedChicks: healthy, 
-            hatchRate: hatchRate, 
-            rearingSystem: rearingSys, 
-            unfertilized: unfert, 
-            deadInShell: dead,
-            crmExpectedPairs: expectedPairs 
-        });
-
-        if(totalChickCost > 0) {
-            await push(ref(db, 'ledger'), { 
-                type: 'batch_cost', 
-                amount: totalChickCost, 
-                desc: `تكلفة تحويل كتاكيت للتربية (${healthy} طائر × ${unitPrice}ج)`, 
-                batchId: id, 
-                date: new Date().toISOString().split('T')[0], 
-                timestamp: Date.now() 
-            });
-        }
-
-        try {
-            const batchDocRef = doc(crmDb, "inventory", "batches");
-            await setDoc(batchDocRef, {
-                [id]: {
-                    name: autoNewName,
-                    isOpen: true,
-                    isVisible: true,
-                    expectedPairs: expectedPairs,
-                    hatchDate: hatchDateObj.getTime(),
-                    slaughterAge: safeSlaughterAgeForCustomer,
-                    stock: {},
-                    booked: {}
-                }
-            }, { merge: true });
-        } catch (err) {
-            console.error("فشل الترحيل لـ CRM:", err);
-            showToast("تم الحفظ داخلياً، لكن فشل الترحيل للمبيعات بسبب الإنترنت.", true);
-        }
-
-        closeModal('modalHatch'); 
-        showToast(`تم النقل للتربية باسم (${autoNewName})! 🚀`);
-    } catch(e) { console.error(e); }
-};
-
-window.syncLegacyBatchesToCRM = async () => {
-    try {
-        if (!allBatches || Object.keys(allBatches).length === 0) {
-            alert("لا توجد دفعات في المزرعة لمزامنتها.");
-            return;
-        }
-
-        let syncedCount = 0;
-        let crmUpdates = {};
-
-        for (const [id, b] of Object.entries(allBatches)) {
-            if (b.status === 'rearing') {
-                let healthy = b.hatchedChicks || 0;
-                let expectedPairs = Math.floor((healthy - 50) / 2);
-                if (expectedPairs < 0) expectedPairs = 0;
-
-                const hatchDateObj = b.hatchDate ? new Date(b.hatchDate) : new Date();
-                const std = birdStandards[b.birdType || 'quail'];
-                const autoSlaughterAge = std ? std.slaughter : 35;
-                const safeSlaughterAgeForCustomer = autoSlaughterAge + 5; 
-
-                crmUpdates[id] = {
-                    name: b.name,
-                    isOpen: true,
-                    isVisible: true,
-                    expectedPairs: expectedPairs,
-                    hatchDate: hatchDateObj.getTime(),
-                    slaughterAge: safeSlaughterAgeForCustomer,
-                    stock: {},
-                    booked: {}
-                };
-                syncedCount++;
-            }
-        }
-
-        if (syncedCount === 0) {
-            alert("لا توجد دفعات في مرحلة التربية تحتاج للمزامنة.");
-            return;
-        }
-
-        if (!confirm(`تم العثور على (${syncedCount}) دفعة في التربية.\nهل تريد ترحيلهم الآن إلى الـ CRM؟`)) return;
-
-        const batchDocRef = doc(crmDb, "inventory", "batches");
-        await setDoc(batchDocRef, crmUpdates, { merge: true });
-        alert(`✅ تمت المزامنة بنجاح! تم ترحيل ${syncedCount} دفعة لسيستم المبيعات.`);
-    } catch (error) {
-        console.error(error);
-        alert("حدث خطأ أثناء المزامنة. يرجى التأكد من الإنترنت.");
-    }
-};
-
-window.sellEggsFromIncubator = async (batchId) => {
-    try {
-        const batch = allBatches[batchId];
-        if(!batch) return;
-        
-        let eggPrice = 0;
-        if(batch.birdType === 'quail') eggPrice = globalSettings.quailChick || 0;
-        else if(batch.birdType === 'chicken') eggPrice = globalSettings.chickenChick || 0;
-        else if(batch.birdType === 'turkey') eggPrice = globalSettings.turkeyEgg || 0;
-
-        const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟\n(سعر البيضة المبرمج: ${eggPrice} ج.م)`, "0");
-        
-        if(qty && !isNaN(qty) && parseInt(qty) > 0) {
-            const sellQty = parseInt(qty);
-            if(sellQty > (batch.initialEggs || 0)) return showToast("العدد أكبر من المتاح!", true);
-            
-            const totalAmount = sellQty * eggPrice;
-            
-            await update(ref(db, `batches/${batchId}`), { initialEggs: (batch.initialEggs || 0) - sellQty });
-            
-            await push(ref(db, 'ledger'), { 
-                type: 'in', 
-                amount: totalAmount, 
-                desc: `بيع بيض (${sellQty}) - ${batch.name}`, 
-                batchId: batchId, 
-                date: new Date().toISOString().split('T')[0], 
-                timestamp: Date.now() 
-            });
-            
-            await set(ref(db, "cashBox"), manualCash + totalAmount);
-            showToast(`تم بيع ${sellQty} بيضة بإجمالي ${totalAmount} ج.م كإيراد`);
-        }
-    } catch(e) { console.error(e); }
-};
-
-window.moveBatchUp = async (id) => {
-    try {
-        const target = allBatches[id];
-        if(!target) return;
-        const isInc = (status) => ['incubator', 'hatcher'].includes(status);
-        const isSamePhase = (s1, s2) => (isInc(s1) && isInc(s2)) || s1 === s2;
-        
-        const arr = Object.keys(allBatches)
-            .map(k => ({ id: k, ...allBatches[k] }))
-            .filter(b => b.birdType === target.birdType && isSamePhase(b.status, target.status))
-            .sort((a,b) => (b.order || 0) - (a.order || 0));
-            
-        const idx = arr.findIndex(b => b.id === id);
-        if(idx > 0) { 
-            await update(ref(db, `batches/${arr[idx - 1].id}`), { order: arr[idx].order }); 
-            await update(ref(db, `batches/${id}`), { order: arr[idx - 1].order }); 
-        }
-    } catch(e) { console.error(e); }
-};
-
-window.moveBatchDown = async (id) => {
-    try {
-        const target = allBatches[id];
-        if(!target) return;
-        const isInc = (status) => ['incubator', 'hatcher'].includes(status);
-        const isSamePhase = (s1, s2) => (isInc(s1) && isInc(s2)) || s1 === s2;
-
-        const arr = Object.keys(allBatches)
-            .map(k => ({ id: k, ...allBatches[k] }))
-            .filter(b => b.birdType === target.birdType && isSamePhase(b.status, target.status))
-            .sort((a,b) => (b.order || 0) - (a.order || 0));
-            
-        const idx = arr.findIndex(b => b.id === id);
-        if(idx < arr.length - 1) { 
-            await update(ref(db, `batches/${arr[idx + 1].id}`), { order: arr[idx].order }); 
-            await update(ref(db, `batches/${id}`), { order: arr[idx + 1].order }); 
-        }
-    } catch(e) { console.error(e); }
-};
-
-window.promptClassify = (id) => { 
-    try {
-        const classIdEl = document.getElementById('classBatchId');
-        if(classIdEl) classIdEl.value = id; 
-        
-        const modalGrid = document.querySelector('#modalClassify .grid-2');
-        if(modalGrid) {
-            modalGrid.innerHTML = ''; 
-            Object.keys(dynamicFreezerConfig).forEach(catId => {
-                modalGrid.innerHTML += `
-                <div>
-                    <label>${dynamicFreezerConfig[catId].name}</label>
-                    <input type="number" id="c_${catId}" value="0" onclick="this.select()">
-                </div>`;
-            });
-        }
-        openModal('modalClassify'); 
-    } catch(e) { console.error(e); }
-};
-
-window.finishSlaughter = async () => {
-    try {
-        const classIdEl = document.getElementById('classBatchId');
-        const id = classIdEl ? classIdEl.value : null;
-        if(!id) return;
-        
-        const b = allBatches[id];
-        if(!b) return;
-        const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
-        
-        let yieldPairs = 0; const toAdd = {};
-        
-        Object.keys(dynamicFreezerConfig).forEach(catId => { 
-            const inputEl = document.getElementById(`c_${catId}`);
-            const val = inputEl ? (parseInt(inputEl.value) || 0) : 0; 
-            if(val > 0) { toAdd[catId] = val; yieldPairs += val; }
-        });
-        
-        if(yieldPairs === 0 && !confirm("هل أنت متأكد من ترحيل الدفعة بأرقام صفرية؟")) return;
-
-        const totalProcessedBirds = yieldPairs * 2;
-        if (totalProcessedBirds > aliveBirds) {
-            return showToast(`❌ مستحيل! قمت بتصنيف ${yieldPairs} جوز (${totalProcessedBirds} طائر)، والمتبقي في العنبر ${aliveBirds} طائر فقط!`, true);
-        }
-
-        const stockSnap = await get(ref(db, "inventory/freezerStock")); 
-        let currentStock = stockSnap.exists() ? stockSnap.val() : {};
-        Object.keys(toAdd).forEach(catId => currentStock[catId] = (currentStock[catId]||0) + toAdd[catId]);
-        
-        await set(ref(db, "inventory/freezerStock"), currentStock);
-        await push(ref(db, 'inventory/freezerLogs'), { batchId: id, batchName: b.name, birdType: b.birdType || 'quail', dateAdded: new Date().toISOString().split('T')[0], items: toAdd });
-        await update(ref(db, `batches/${id}`), { status: 'completed', slaughterYield: yieldPairs, classifyData: toAdd });
-        
-        closeModal('modalClassify'); showToast("تم تصنيف الدفعة والترحيل للفريزر ❄️");
-    } catch(e) { console.error(e); }
-};
-
-// ================= 6. المبيعات والمصروفات =================
-window.saveDailyLog = async () => {
-    try {
-        const id = document.getElementById('dBatch')?.value;
-        const dead = parseInt(document.getElementById('dDead')?.value) || 0;
-        const feed = parseFloat(document.getElementById('dFeed')?.value) || 0;
-        if(!id || (dead===0 && feed===0) || dead < 0 || feed < 0) return showToast("أدخل بيانات صحيحة", true);
-
-        const b = allBatches[id]; 
-        if(!b) return;
-        const today = new Date().toISOString().split('T')[0];
-        
-        const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
-
-        if (dead > aliveBirds) {
-            return showToast(`❌ خطأ: المتبقي بالعنبر (${aliveBirds} طائر) وأنت تحاول تسجيل (${dead}) نافق!`, true);
-        }
-
-        await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
-
-        if(feed > 0) {
-            if(currentFeedStock < feed) return alert(`⚠️ الرصيد (${currentFeedStock} ك) لا يكفي!`);
-            await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
-            await push(ref(db, 'ledger'), { type: 'batch_cost', amount: feed * (globalSettings.feedPrice || 30), desc: `سحب علف (${feed}ك)`, batchId: id, date: today, timestamp: Date.now() });
-        }
-        await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
-        closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك");
-    } catch(e) { console.error(e); }
-};
-
-window.calculateSaleTotal = () => {
-    try {
-        const grade = document.getElementById('sGrade')?.value;
-        const qty = parseInt(document.getElementById('sQty')?.value) || 0;
-        const displayEl = document.getElementById('saleTotalDisplay');
-        if(displayEl && grade) {
-            displayEl.innerText = (qty * (dynamicFreezerConfig[grade]?.price || 0)) + " ج.م";
-        }
-    } catch(e) { console.error(e); }
-};
-
-window.processSale = async () => {
-    try {
-        const grade = document.getElementById('sGrade')?.value;
-        const qty = parseInt(document.getElementById('sQty')?.value) || 0;
-        if(!grade || !qty) return showToast("أدخل بيانات البيع", true);
-
-        const amount = qty * (dynamicFreezerConfig[grade]?.price || 0);
-        const snap = await get(ref(db, `inventory/freezerStock/${grade}`));
-        const currentStock = snap.exists() ? snap.val() : 0;
-        if(currentStock < qty) return showToast(`الرصيد لا يكفي! المتاح: ${currentStock}`, true);
-
-        await set(ref(db, `inventory/freezerStock/${grade}`), currentStock - qty);
-        await saveTransaction('in', amount, `مبيعات (${qty} جوز - ${dynamicFreezerConfig[grade].name})`);
-        closeModal('modalSale'); showToast("تم البيع بنجاح");
-    } catch(e) { console.error(e); }
-};
-
-window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
-    try {
-        const amount = amountOverride || parseFloat(document.getElementById('eAmount')?.value);
-        const desc = descOverride || document.getElementById('eType')?.value;
-        const batchId = (type === 'out') ? (document.getElementById('eBatch')?.value || 'general') : 'general';
-        if(!amount) return showToast("أدخل المبلغ", true);
-
-        await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
-        await set(ref(db, "cashBox"), manualCash + (type === 'in' ? amount : -amount));
-        if(!amountOverride) { closeModal('modalExpense'); showToast("تم التسجيل"); }
-    } catch(e) { console.error(e); }
-};
-
-window.deleteTransaction = async (id) => {
-    if(confirm("حذف هذه المعاملة؟")) {
-        try {
-            const t = allTransactions[id];
-            if(!t) return;
-            if (t.type === 'in') { await set(ref(db, "cashBox"), manualCash - t.amount); } 
-            else if (t.type === 'out') { await set(ref(db, "cashBox"), manualCash + t.amount); } 
-            else if (t.type === 'batch_cost') {
-                const feedQty = t.amount / (globalSettings.feedPrice || 30);
-                await set(ref(db, "inventory/feedStock"), currentFeedStock + feedQty);
-            }
-            await remove(ref(db, `ledger/${id}`)); 
-            showToast("تم الحذف وتحديث الأرصدة بنجاح");
-        } catch(e) { console.error(e); }
-    }
-};
-
-window.resetSystem = async () => {
-    if(confirm("🛑 سيتم مسح كل البيانات!")) {
-        if(prompt("اكتب 'تأكيد':") === 'تأكيد') {
-            try {
-                await remove(ref(db, 'batches')); 
-                await remove(ref(db, 'ledger')); 
-                await remove(ref(db, 'inventory')); 
-                await remove(ref(db, 'cashBox')); 
-                showToast("تم التصفير");
-            } catch(e) { console.error(e); }
-        }
-    }
-};
-
-window.resetFinancials = async () => {
-    if(confirm("⚠️ هل أنت متأكد من تصفير دفتر الحسابات بالكامل؟\n(سيتم مسح الإيرادات والمصروفات وتصفير الخزنة)")) {
-        if(prompt("اكتب 'تأكيد' لتنفيذ التصفير:") === 'تأكيد') {
-            try {
-                await remove(ref(db, 'ledger')); 
-                await set(ref(db, 'cashBox'), 0); 
-                showToast("تم تصفير الحسابات بنجاح 🧹");
-            } catch(e) { console.error(e); }
-        }
-    }
-};
-
-// ================= 7. رندر الداشبورد والعنابر =================
-onValue(ref(db, "batches"), (snapshot) => { 
-    try {
-        allBatches = snapshot.exists() ? snapshot.val() : {}; 
-        renderBatches(); 
-        if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
-    } catch(e) { console.error(e); }
-});
-
-function formatDateTime(isoString) {
-    if(!isoString) return '-';
-    try {
-        const date = new Date(isoString);
-        const pad = n => n.toString().padStart(2, '0');
-        return `${date.toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })} (${pad(date.getHours())}:${pad(date.getMinutes())})`;
-    } catch(e) { return '-'; }
-}
-
-function renderBatches() {
-    try {
-        const ui = { 
-            inc: document.getElementById('incubatorList'), 
-            rear: document.getElementById('rearingList'), 
-            slaugh: document.getElementById('slaughterList'), 
-            alerts: document.getElementById('alertsContainer'), 
-            dSelect: document.getElementById('dBatch'), 
-            eSelect: document.getElementById('eBatch'), 
-            rSelect: document.getElementById('reportBatchSelect') 
-        };
-        
-        if(!ui.inc) return;
-        ui.inc.innerHTML = ''; ui.rear.innerHTML = ''; ui.slaugh.innerHTML = ''; ui.alerts.innerHTML = ''; 
-        if(ui.dSelect) ui.dSelect.innerHTML = ''; 
-        if(ui.eSelect) ui.eSelect.innerHTML = '<option value="general">مصروف عام</option>'; 
-        if(ui.rSelect) ui.rSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
-        
-        let stats = { eggs: 0, chicks: 0 }; const now = new Date();
-
-        const formatTimeLeft = (hours) => {
-            const absHours = Math.abs(hours);
-            const d = Math.floor(absHours / 24);
-            const h = Math.floor(absHours % 24);
-            if (d > 0 && h > 0) return `${d} يوم و ${h} ساعة`;
-            if (d > 0) return `${d} يوم`;
-            return `${h} ساعة`;
-        };
-
-        if (currentFeedStock < 50 && ui.alerts) {
-            ui.alerts.innerHTML += `<div style="color:var(--danger); font-weight:800; margin-bottom:12px; padding:10px; border:1px dashed var(--danger); border-radius:8px;"><i class="fas fa-triangle-exclamation"></i> تحذير عاجل: العلف بالمخزن أوشك على النفاذ (${currentFeedStock} كجم فقط)!</div>`;
-        }
-
-        let incGroups = { quail: '', chicken: '', turkey: '' };
-
-        Object.keys(allBatches).sort((a,b) => (allBatches[b].order || 0) - (allBatches[a].order || 0)).forEach(id => {
-            const b = allBatches[id]; const std = birdStandards[b.birdType || 'quail']; const bTypeName = std?.name || 'طائر'; const bIcon = std?.icon || '🐣';
-
-            if(ui.rSelect) ui.rSelect.innerHTML += `<option value="${id}">${b.name} (${bTypeName})</option>`;
-            if(b.status !== 'completed' && ui.eSelect) ui.eSelect.innerHTML += `<option value="${id}">${b.name}</option>`;
-
-            let batchAlertHtml = '';
-            const hoursToHatcher = b.hatcherDate ? (new Date(b.hatcherDate) - now) / 3600000 : 0;
-            const hoursToHatch = b.hatchDate ? (new Date(b.hatchDate) - now) / 3600000 : 0;
-            const hoursToSlaughter = b.rearDate ? (new Date(b.rearDate) - now) / 3600000 : 0;
-
-            if (b.status === 'incubator' || b.status === 'hatcher') {
-                stats.eggs += (b.initialEggs || 0);
-                const daysIn = b.insertDate ? (Math.floor((now - new Date(b.insertDate)) / 3600000) / 24).toFixed(1) : 0;
-                let badge = '', actionBtn = '';
-                
-                if(b.status === 'incubator') {
-                    badge = `<span class="badge" style="background:var(--info);">حضانة</span>`;
-                    if (hoursToHatcher > 0 && hoursToHatcher <= 72) {
-                        ui.alerts.innerHTML += `<div style="background: rgba(245, 158, 11, 0.1); border-right: 4px solid var(--warning); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">⏳ الدفعة <b>${b.name}</b> متبقي لها <b>${formatTimeLeft(hoursToHatcher)}</b> للنزول للمفقس.</div>`;
-                    } else if(hoursToHatcher <= 0 && hoursToHatcher > -24) { 
-                        actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
-                        ui.alerts.innerHTML += `<div style="color:var(--info); font-weight:bold; margin-bottom: 8px;">⚠️ الدفعة <b>${b.name}</b> جاهزة للنقل للمفقس الآن!</div>`; 
-                        batchAlertHtml = `<div style="background: rgba(14, 165, 233, 0.1); color: var(--info); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان وقت النقل للمفقس!</div>`;
-                    } else if(hoursToHatcher <= -24) {
-                        actionBtn = `<button class="btn btn-info" onclick="updateStage('${id}','hatcher')" style="margin-top:0; padding:8px;">نقل للمفقس 📥</button>`; 
-                        ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 تحذير خطير! الدفعة <b>${b.name}</b> تأخرت عن المفقس بمقدار <b>${formatTimeLeft(hoursToHatcher)}</b>!</div>`; 
-                        batchAlertHtml = `<div style="background: rgba(220, 38, 38, 0.1); color: var(--danger); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🚨 تأخير خطير في النقل!</div>`;
-                    }
-                } else {
-                    badge = `<span class="badge" style="background:var(--primary);">مفقس</span>`;
-                    if (hoursToHatch > 0 && hoursToHatch <= 72) {
-                        ui.alerts.innerHTML += `<div style="background: rgba(14, 165, 233, 0.1); border-right: 4px solid var(--info); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🐣 الدفعة <b>${b.name}</b> متبقي لها <b>${formatTimeLeft(hoursToHatch)}</b> على الفقس.</div>`;
-                    } else if(hoursToHatch <= 0 && hoursToHatch > -24) { 
-                        actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
-                        ui.alerts.innerHTML += `<div style="color:var(--success); font-weight:bold; margin-bottom: 8px;">🐣 الدفعة <b>${b.name}</b> جاهزة للفقس الآن!</div>`; 
-                        batchAlertHtml = `<div style="background: rgba(34, 197, 94, 0.1); color: var(--success); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🔔 حان موعد الفقس!</div>`;
-                    } else if(hoursToHatch <= -24) {
-                        actionBtn = `<button class="btn btn-primary" onclick="promptHatch('${id}')" style="margin-top:0; padding:8px;">إتمام الفقس 🐣</button>`; 
-                        ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 كارثة محتملة! الدفعة <b>${b.name}</b> تأخر فقسها <b>${formatTimeLeft(hoursToHatch)}</b>!</div>`; 
-                        batchAlertHtml = `<div style="background: rgba(220, 38, 38, 0.1); color: var(--danger); padding: 8px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; font-size: 13px;">🚨 تأخير خطير في الفقس!</div>`;
-                    }
-                }
-
-                const cardHTML = `
-                <div class="batch-card stage-${b.status}">
-                    ${batchAlertHtml}
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:24px;">${bIcon}</span>
-                            <div>
-                                <strong style="font-size:18px; color:var(--text-primary); display:block;">${b.name}</strong>
-                                <span style="font-size:12px; color:var(--text-secondary);">${bTypeName}</span>
-                            </div>
-                        </div>
-                        ${badge}
-                    </div>
-                    
-                    <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-bottom: 10px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>دخول الماكينة:</span> <strong style="color:var(--text-primary);">${formatDateTime(b.insertDate)}</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>نزول المفقس:</span> <strong style="color:var(--info);">${formatDateTime(b.hatcherDate)}</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span>موعد الفقس للخروج:</span> <strong style="color:var(--success);">${formatDateTime(b.hatchDate)}</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; padding-top:5px; border-top:1px solid var(--border);">
-                            <span>موعد الذبح (المبرمج):</span> <strong style="color:var(--danger);">${formatDateTime(b.rearDate)}</strong>
-                        </div>
-                    </div>
-
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; font-weight:bold;">
-                        <span>البيض المتاح: <span style="color:var(--primary); font-size:18px;">${b.initialEggs}</span></span>
-                        <span>مر ${daysIn} يوم</span>
-                    </div>
-                    <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px;">
-                        <div style="display:flex; gap:5px;">
-                            <button onclick="moveBatchUp('${id}')" title="أعلى">⬆️</button>
-                            <button onclick="moveBatchDown('${id}')" title="أسفل">⬇️</button>
-                            <button onclick="sellEggsFromIncubator('${id}')" title="بيع بيض" style="color:var(--warning);"><i class="fas fa-egg"></i> بيع</button>
-                            <button onclick="openEditBatch('${id}')" title="تعديل" style="color: var(--info);">✏️</button>
-                            <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger);">🗑️</button>
-                        </div>
-                        <div style="display:flex; gap:5px;">${actionBtn}</div>
-                    </div>
-                </div>`;
-
-                if(b.birdType === 'quail') incGroups.quail += cardHTML;
-                else if(b.birdType === 'turkey') incGroups.turkey += cardHTML;
-                else incGroups.chicken += cardHTML;
-
-            } else if (b.status === 'rearing') {
-                const alive = (b.hatchedChicks || 0) - (b.totalDead||0); stats.chicks += alive; 
-                const age = b.hatchDate ? (Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1) : 1; 
-                if(ui.dSelect) ui.dSelect.innerHTML += `<option value="${id}">${b.name} (عمر ${age} يوم)</option>`;
-                
-                if (hoursToSlaughter > 0 && hoursToSlaughter <= 72) {
-                     ui.alerts.innerHTML += `<div style="background: rgba(239, 68, 68, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--text-primary);">🔪 الدفعة <b>${b.name}</b> متبقي لها <b>${formatTimeLeft(hoursToSlaughter)}</b> لتكون جاهزة للذبح.</div>`;
-                } else if (hoursToSlaughter <= 0 && hoursToSlaughter > -48) {
-                     ui.alerts.innerHTML += `<div style="color:var(--warning); font-weight:bold; margin-bottom:8px;">⏳ الدفعة <b>${b.name}</b> بلغت ${age} يوم (جاهزة للذبح).</div>`;
-                } else if (hoursToSlaughter <= -48) {
-                     ui.alerts.innerHTML += `<div style="background: rgba(220, 38, 38, 0.1); border-right: 4px solid var(--danger); padding: 8px; margin-bottom: 8px; border-radius: 4px; color: var(--danger); font-weight:bold;">🚨 استهلاك زائد! الدفعة <b>${b.name}</b> تخطت موعد الذبح بمقدار <b>${formatTimeLeft(hoursToSlaughter)}</b>!</div>`;
-                }
-                
-                ui.rear.innerHTML += `<div class="batch-card stage-rearing">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div><span style="font-size:20px;">${bIcon}</span> <strong>${b.name}</strong></div> 
-                    <span class="badge" style="background:var(--warning);color:#000;">عمر ${age} يوم</span>
-                </div>
-                
-                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; font-size: 13px; border: 1px dashed var(--border); margin-top: 10px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <span>بداية التربية (الفقس):</span> <strong style="color:var(--text-primary);">${formatDateTime(b.hatchDate)}</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between;">
-                        <span>موعد الذبح المتوقع:</span> <strong style="color:var(--danger);">${formatDateTime(b.rearDate)}</strong>
-                    </div>
-                </div>
-
-                <div style="font-size:12px; color:var(--primary); margin-top:10px; font-weight:bold;">🐣 نسبة الفقس: ${b.hatchRate||0}%</div>
-                <div class="grid-2" style="margin-top:10px; background:var(--bg-main); padding:10px; border-radius:8px; text-align:center;">
-                    <div>متبقي: <b style="font-size:18px;">${alive}</b></div>
-                    <div>استهلكت: <b style="font-size:18px;">${b.totalFeed||0} ك</b></div>
-                </div>
-                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                    <div style="display:flex; gap:8px;">
-                        <button onclick="openEditBatch('${id}')" title="تعديل الاسم والتواريخ" style="background:none; border:none; color: #0ea5e9; font-size:18px;">✏️</button>
-                        <button onclick="deleteBatch('${id}')" title="حذف" style="background:none; border:none; color: #ef4444; font-size:18px;">🗑️</button>
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn" style="background: #0ea5e9; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="openDailyGuide('${id}')">
-                            <i class="fas fa-clipboard-check"></i> مهام
-                        </button>
-                        <button class="btn" style="background: #ef4444; color: white; padding: 6px 12px; border-radius: 6px; font-size:13px;" onclick="updateStage('${id}','slaughter')">
-                            <i class="fas fa-knife"></i> للذبح 🔪
-                        </button>
-                    </div>
-                </div></div>`;
-            }
-            else if (b.status === 'slaughter') { 
-                ui.slaugh.innerHTML += `<div class="batch-card stage-slaughter">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:24px;">${bIcon}</span>
-                        <div>
-                            <strong style="font-size:18px; color:var(--text-primary); display:block;">${b.name}</strong>
-                            <span style="font-size:12px; color:var(--text-secondary);">${bTypeName}</span>
-                        </div>
-                    </div> 
-                    <span class="badge" style="background:var(--danger);">قيد الذبح والتجهيز</span>
-                </div>
-                
-                <div style="margin: 15px 0; padding: 10px; background: var(--bg-main); border-radius: 8px; font-size: 13px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <span>الحالة:</span> <strong style="color:var(--danger);">جاهزة للتصنيف والترحيل</strong>
-                    </div>
-                    <div style="display:flex; justify-content:space-between;">
-                        <span>الإجمالي للذبح:</span> <strong>${((b.hatchedChicks||0) - (b.totalDead||0)) || 0} طائر</strong>
-                    </div>
-                </div>
-
-                <div class="batch-actions" style="justify-content: space-between; border-top: 1px solid var(--border); padding-top: 10px; margin-top:10px;">
-                    <div style="display:flex; gap:5px;">
-                        <button onclick="deleteBatch('${id}')" title="حذف" style="color: var(--danger); background:none; border:none; font-size:18px;">🗑️</button>
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn btn-warning" style="margin:0; padding:6px 12px; font-size:13px;" onclick="updateStage('${id}','rearing')"><i class="fas fa-undo"></i> تراجع ↩️</button>
-                        <button class="btn btn-success" style="margin:0; padding:6px 12px; font-size:13px;" onclick="promptClassify('${id}')">تصنيف للترحيل ❄️</button>
-                    </div>
-                </div></div>`; 
-            }
-        });
-        
-        if(incGroups.quail) ui.inc.innerHTML += `<div class="card-header" style="color:var(--info); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px;"><i class="fas fa-dove"></i> قسم تفريخ السمان</div>` + incGroups.quail;
-        if(incGroups.chicken) ui.inc.innerHTML += `<div class="card-header" style="color:var(--warning); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-kiwi-bird"></i> قسم تفريخ الدواجن</div>` + incGroups.chicken;
-        if(incGroups.turkey) ui.inc.innerHTML += `<div class="card-header" style="color:var(--danger); font-size:16px; background:var(--bg-main); padding:8px 15px; border-radius:8px; margin-top:15px;"><i class="fas fa-turkey"></i> قسم تفريخ الرومي</div>` + incGroups.turkey;
-        
-        if(ui.inc.innerHTML === '') ui.inc.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد دفعات في المفرخ حالياً.</div>';
-
-        if(ui.alerts && ui.alerts.innerHTML === '') ui.alerts.innerHTML = '<div style="color:var(--success); font-weight:bold;">✅ المزرعة مستقرة. لا يوجد تنبيهات أو نواقص حالياً.</div>';
-        
-        if(document.getElementById('dashEggs')) document.getElementById('dashEggs').innerText = stats.eggs; 
-        if(document.getElementById('dashChicks')) document.getElementById('dashChicks').innerText = stats.chicks;
-    } catch(e) { console.error("Error in renderBatches", e); }
-}
-
-// ================= 8. التقارير والماليات =================
-onValue(ref(db, "ledger"), (snapshot) => {
-    try {
-        allTransactions = snapshot.exists() ? snapshot.val() : {}; 
-        let tIn = 0, tOut = 0;
-        
-        Object.values(allTransactions).forEach(t => {
-            if(t.type === 'in') tIn += t.amount; 
-            else if(t.type === 'out') tOut += t.amount;
-        });
-        
-        if(document.getElementById('totalRev')) document.getElementById('totalRev').innerText = tIn; 
-        if(document.getElementById('totalExp')) document.getElementById('totalExp').innerText = tOut;
-        if(document.getElementById('netProfit')) document.getElementById('netProfit').innerText = (tIn - tOut) + " ج.م"; 
-        if(document.getElementById('dashSales')) document.getElementById('dashSales').innerText = tIn;
-        
-        if(document.getElementById('reportBatchSelect')?.value) window.generateBatchReport(); 
-        updateCashDisplay();
-
-        window.renderTransactionsList();
-    } catch(e) { console.error(e); }
-});
-
-window.renderTransactionsList = () => {
-    try {
-        const lList = document.getElementById('ledgerList');
-        if(!lList) return;
-
-        let html = '';
-        
-        let txArray = Object.keys(allTransactions)
-            .map(id => ({ id, ...allTransactions[id] }))
-            .sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-        if (currentLedgerSearch.trim() !== '') {
-            txArray = txArray.filter(t => t.desc && t.desc.toLowerCase().includes(currentLedgerSearch.toLowerCase()));
-        }
-
-        if (currentLedgerFilter !== 'all') {
-            txArray = txArray.filter(t => t.type === currentLedgerFilter);
-        }
-
-        const limit = 50;
-        const totalFound = txArray.length;
-        txArray = txArray.slice(0, limit);
-
-        txArray.forEach(t => {
-            let typeColor = t.type === 'in' ? 'var(--success)' : (t.type === 'out' ? 'var(--danger)' : 'var(--warning)');
-            let sign = t.type === 'in' ? '+' : '-';
-            let descLabel = t.type === 'batch_cost' ? '(سحب عيني)' : '';
-            
-            html += `<div class="transaction-item" style="border-right: 4px solid ${typeColor}; padding-right: 10px;">
-                <div>
-                    <b>${t.desc || ''} <span style="font-size:11px; color:var(--warning);">${descLabel}</span></b> 
-                    <button onclick="deleteTransaction('${t.id}')" style="background:none; border:none; color:var(--danger); cursor:pointer; margin-right:8px;" title="حذف">🗑️</button><br>
-                    <span style="font-size:12px;color:var(--text-secondary);">${t.date || ''}</span>
-                </div>
-                <div style="font-weight:900; color:${typeColor}" dir="ltr">${sign} ${t.amount || 0} ج</div>
-            </div>`;
-        });
-        
-        if (totalFound > limit) {
-            html += `<div style="text-align:center; padding: 12px; color: var(--text-secondary); font-size: 13px; background: var(--bg-main); border-radius: 8px; margin-top: 10px;">
-                💡 يتم عرض أحدث 50 حركة من أصل ${totalFound}. استخدم البحث أو التصفية للوصول للحركات الأقدم.
-            </div>`;
-        }
-
-        lList.innerHTML = html || '<div style="text-align:center;padding:20px;color:var(--text-secondary);">لا توجد سجلات مطابقة للبحث</div>';
-    } catch(e) { console.error(e); }
-};
-
-window.filterLedger = (type) => { currentLedgerFilter = type; window.renderTransactionsList(); };
-window.searchLedger = (query) => { currentLedgerSearch = query; window.renderTransactionsList(); };
-
-window.generateBatchReport = () => {
-    try {
-        const id = document.getElementById('reportBatchSelect')?.value;
-        const container = document.getElementById('batchReportContainer');
-        if(!id || !container) { if(container) container.style.display = 'none'; return; }
-        
-        const b = allBatches[id]; 
-        if(!b) return;
-        let batchCost = 0; 
-        Object.values(allTransactions).forEach(t => { if(t.batchId === id && (t.type === 'out' || t.type === 'batch_cost')) batchCost += t.amount; });
-        const dead = b.totalDead || 0;
-        
-        if(b.status === 'completed' && b.classifyData) {
-            const yieldTotal = b.slaughterYield || 0; let potentialRevenue = 0; let outputHtml = '';
-            Object.keys(b.classifyData).forEach(g => { if(b.classifyData[g] > 0) { potentialRevenue += (b.classifyData[g] * (dynamicFreezerConfig[g]?.price || 0)); outputHtml += `<span class="badge" style="background:var(--primary); margin:2px;">${dynamicFreezerConfig[g]?.name || g}: ${b.classifyData[g]}</span>`; } });
-            
-            const costPerPair = yieldTotal > 0 ? (batchCost / yieldTotal).toFixed(2) : 0; 
-            const netProfit = potentialRevenue - batchCost;
-            const totalFeedKg = b.totalFeed || 0; 
-            const feedPerBirdGrams = yieldTotal > 0 ? ((totalFeedKg * 1000) / (yieldTotal * 2)).toFixed(0) : 0; 
-            let fcrStatus = '';
-
-            if(b.birdType === 'quail' || !b.birdType) { if(feedPerBirdGrams < 450) fcrStatus = '<span style="color:var(--success);">ممتاز 🌟</span>'; else if(feedPerBirdGrams <= 550) fcrStatus = '<span style="color:var(--warning);">متوسط ⚠️</span>'; else fcrStatus = '<span style="color:var(--danger);">ضعيف ❌</span>'; } else { fcrStatus = '<span style="color:var(--info);">تم الحساب</span>'; }
-
-            let stampHtml = netProfit > 0 ? `<div class="result-stamp" style="color:var(--success); border-color:var(--success);">✅ مكسب: +${netProfit} ج.م</div>` : (netProfit < 0 ? `<div class="result-stamp" style="color:var(--danger); border-color:var(--danger);">❌ خسارة: ${netProfit} ج.م</div>` : `<div class="result-stamp" style="color:var(--warning); border-color:var(--warning);">➖ تعادل</div>`);
-
-            container.innerHTML = `<div style="background:var(--bg-main); padding:15px; border-radius:10px; border: 1px solid var(--border);">
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:15px;">
-                    <h3 style="margin:0; color:var(--text-primary);">بيان ختامي - ${b.name}</h3>
-                    <button onclick="deleteBatch('${id}')" title="حذف الدفعة نهائياً" style="background:var(--danger); color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:5px;">
-                        <i class="fas fa-trash"></i> حذف
-                    </button>
-                </div>
-                <div class="grid-2" style="font-size:14px; line-height:2;"><div>🥚 بيض: <b>${b.initialEggs}</b></div><div>🐣 فقس: <b class="text-success">${b.hatchRate||0}%</b></div><div>☠️ نافق: <b class="text-danger">${dead}</b></div><div>🌾 علف: <b>${totalFeedKg} كجم</b></div></div><div style="margin-top:15px; padding:10px; background:var(--surface); border-radius:8px; text-align:center; border:1px solid var(--border);"><span style="font-size:13px; color:var(--text-secondary);">مؤشر الاستهلاك (FCR):</span><br><b style="font-size:22px; color:var(--primary);">${feedPerBirdGrams} جرام/طائر</b> <br><span style="font-size:13px; font-weight:bold;">التقييم التقني: ${fcrStatus}</span></div><hr style="border:1px dashed var(--border); margin:15px 0;"><div style="margin-bottom:15px;"><b>مخرجات الدفعة (الفريزر):</b><br>${outputHtml}</div><div class="grid-2" style="background:var(--surface); padding:10px; border-radius:8px; border:1px solid var(--border);"><div>التكلفة الإجمالية:<br><b class="text-danger" style="font-size:18px;">${batchCost} ج</b></div><div>البيع المتوقع:<br><b class="text-success" style="font-size:18px;">${potentialRevenue} ج</b></div></div><div style="text-align:center; margin-top:15px; background:var(--surface); border:1px solid var(--primary); padding:10px; border-radius:8px;"><span style="font-size:14px;">تكلفة إنتاج <b style="color:var(--warning);">الجوز الواحد</b>: <b style="font-size:18px; color:var(--primary);">${costPerPair} ج.م</b></span></div>${stampHtml}</div>`;
-        } else { 
-            container.innerHTML = `
-            <div style="padding:20px; text-align:center; border: 1px dashed var(--danger); border-radius: 8px; background: rgba(239, 68, 68, 0.05);">
-                <div style="color:var(--danger); font-weight:bold; margin-bottom: 15px; font-size:16px;">الدفعة لم تكتمل للبيان الختامي، أو أنها دفعة تجريبية.</div>
-                <button onclick="deleteBatch('${id}')" style="background:var(--danger); color:white; border:none; border-radius:6px; padding:8px 20px; font-size:14px; cursor:pointer;">
-                    <i class="fas fa-trash"></i> مسح الدفعة نهائياً
+                <button class="btn" onclick="switchPage('breeders')" style="background: var(--primary); margin-top:15px; padding:12px; font-size:14px; color: white; width: 100%;">
+                    <i class="fas fa-venus-mars"></i> الدخول لقطيع الأمهات وفرز البيض
                 </button>
-            </div>`; 
-        }
-        container.style.display = 'block';
-    } catch(e) { console.error(e); }
-};
-
-// ================= 9. المساعد الذكي للتربية (دليل العامل) =================
-function getQuailDailyNeeds(age, aliveCount, system) {
-    let temp = 35, feedPerBird = 5, meds = "ماء نقي خالي من الإضافات";
-    if (age <= 3) { temp = 37; feedPerBird = 4; meds = "مضاد حيوي معوي وتنفسي + فيتامينات (AD3E)"; }
-    else if (age <= 7) { temp = 35; feedPerBird = 6; meds = "أملاح معدنية وأحماض أمينية"; }
-    else if (age <= 10) { temp = 33; feedPerBird = 8; if(age === 10) meds = "تحصين نيوكاسل (تغطيس أو شرب)"; }
-    else if (age <= 14) { temp = 31; feedPerBird = 11; if(age >= 13) meds = "جرعة وقاية: كوكسيديا وكلوستريديا"; }
-    else if (age <= 21) { temp = 28; feedPerBird = 15; meds = "فيتامينات (هـ سيلينيوم) لرفع المناعة"; }
-    else if (age <= 28) { temp = 25; feedPerBird = 20; meds = "ماء نقي"; }
-    else if (age <= 35) { temp = 24; feedPerBird = 24; meds = "ماء نقي (فترة سحب الدواء)"; }
-    else { temp = 24; feedPerBird = 28; meds = "ماء نقي - جاهزة للذبح"; }
-
-    let totalFeedKg = (feedPerBird * aliveCount) / 1000;
-    let totalWaterLiters = (totalFeedKg * 2.2); 
-    let spaceRequired = system === 'battery' ? (aliveCount / 120) : (aliveCount / 60);
-
-    return { temp, feed: totalFeedKg.toFixed(2), water: totalWaterLiters.toFixed(1), space: spaceRequired.toFixed(1), meds };
-}
-
-window.openDailyGuide = (id) => {
-    try {
-        const b = allBatches[id];
-        if(!b) return;
-        if(b.birdType !== 'quail') return showToast("هذا الدليل مبرمج للسمان فقط حالياً!", true);
-
-        const now = new Date();
-        const age = b.hatchDate ? (Math.floor((now - new Date(b.hatchDate)) / 86400000) || 1) : 1; 
-        const alive = (b.hatchedChicks || 0) - (b.totalDead || 0);
-        const system = b.rearingSystem || 'floor';
-
-        const needs = getQuailDailyNeeds(age, alive, system);
-
-        document.getElementById('dailyGuideContent').innerHTML = `
-            <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
-                <div style="text-align:center; margin-bottom:15px;">
-                    <span style="font-size:14px; color:var(--text-secondary);">دفعة: <strong>${b.name}</strong></span><br>
-                    <span style="font-size:18px; color:var(--primary); font-weight:800;">عمر: ${age} يوم</span>
-                </div>
-                <div class="grid-2" style="gap:10px;">
-                    <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
-                        <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة المطلوبة</div>
-                        <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.temp} °C</div>
-                    </div>
-                    <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--info);">
-                        <div style="font-size:12px; color:var(--text-secondary);">💧 المياه المطلوبة</div>
-                        <div style="font-size:20px; font-weight:bold; color:var(--text-primary);">${needs.water} لتر</div>
-                    </div>
-                </div>
-                <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--warning);">
-                    <div style="font-size:12px; color:var(--text-secondary);">🌾 العلف لليوم بالكامل (${alive} طائر)</div>
-                    <div style="font-size:20px; font-weight:bold; color:var(--warning);">${needs.feed} كجم</div>
-                </div>
-                <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--primary);">
-                    <div style="font-size:12px; color:var(--text-secondary);">💊 التحصينات اليوم</div>
-                    <div style="font-size:15px; font-weight:bold; color:var(--primary);">${needs.meds}</div>
-                </div>
-                <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
-                    <div style="font-size:12px; color:var(--text-secondary);">📏 المساحة ونوع التربية</div>
-                    <div style="font-size:14px; font-weight:bold; color:var(--text-primary);">
-                        نظام: ${system === 'floor' ? 'أرضي' : 'بطاريات'} <br>
-                        مساحة العنبر: <span style="color:var(--success); font-size:16px;">${needs.space} متر مربع</span>
-                    </div>
-                </div>
-            </div>`;
-        openModal('modalDailyGuide');
-    } catch(e) { console.error(e); }
-};
-
-// ================= 10. نظام الإنتاجية (Ctrl+K) =================
-const sysCmds = [
-    { title: 'الانتقال إلى: لوحة القيادة', icon: 'fas fa-chart-pie', action: () => switchPage('dashboard') },
-    { title: 'الانتقال إلى: المفرخ', icon: 'fas fa-egg', action: () => switchPage('incubator') },
-    { title: 'الانتقال إلى: التربية', icon: 'fas fa-warehouse', action: () => switchPage('rearing') },
-    { title: 'الانتقال إلى: الفريزر', icon: 'fas fa-snowflake', action: () => switchPage('freezer') },
-    { title: 'الانتقال إلى: الحسابات', icon: 'fas fa-wallet', action: () => switchPage('finance') },
-    { title: 'إضافة دفعة 🐣', icon: 'fas fa-plus', action: () => openModal('modalBatch') },
-    { title: 'شراء علف 🌾', icon: 'fas fa-truck', action: () => openModal('modalBuyFeed') },
-    { title: 'تسجيل مبيعات 💰', icon: 'fas fa-shopping-cart', action: () => openModal('modalSale') }
-];
-window.openCommandPalette = () => { const cp = document.getElementById('commandPalette'); if(!cp) return; cp.classList.add('active'); setTimeout(() => document.getElementById('cmdInput')?.focus(), 100); renderCmdResults(''); };
-window.closeCommandPalette = () => { const cp = document.getElementById('commandPalette'); if(cp) cp.classList.remove('active'); const inp = document.getElementById('cmdInput'); if(inp) inp.value = ''; };
-
-const renderCmdResults = (query) => {
-    try {
-        const c = document.getElementById('cmdResults'); if(!c) return; c.innerHTML = '';
-        const f = sysCmds.filter(cmd => cmd.title.toLowerCase().includes(query.toLowerCase()));
-        if(f.length === 0) return c.innerHTML = `<div style="padding:15px; text-align:center;">لا توجد أوامر</div>`;
-        f.forEach(cmd => {
-            const el = document.createElement('div');
-            el.innerHTML = `<i class="${cmd.icon}" style="color:var(--primary); width:20px;"></i> <b>${cmd.title}</b>`;
-            el.style.cssText = `padding:12px; cursor:pointer; border-radius:8px; display:flex; align-items:center; gap:10px; transition:0.2s;`;
-            el.onmouseover = () => el.style.background = 'rgba(37,99,235,0.1)'; el.onmouseout = () => el.style.background = 'transparent';
-            el.onclick = () => { closeCommandPalette(); cmd.action(); };
-            c.appendChild(el);
-        });
-    } catch(e) { console.error(e); }
-};
-
-document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCommandPalette(); } if (e.key === 'Escape') closeCommandPalette(); });
-document.addEventListener('click', (e) => { if (e.target === document.getElementById('commandPalette')) closeCommandPalette(); });
-document.getElementById('cmdInput')?.addEventListener('input', (e) => renderCmdResults(e.target.value));
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW setup error', e));
-}
-
-// ================= 12. نظام الإدارة الذكي (الأمهات ومكنة PTO C 12) =================
-
-let activeFlockCount = 0;
-let activeFemales = 0;
-let activeMales = 0;
-let flockEntryDate = '';
-let currentFlockAgeWeeks = 0;
-let accumulatedGoodEggs = 0;
-let ptoSettings = { shelves: 12, capacityPerShelf: 500 }; 
-let incubatorShelves = {};
-
-onValue(ref(db, "inventory/flockData"), (snapshot) => {
-    try {
-        if(snapshot.exists()) {
-            const data = snapshot.val();
-            activeFemales = data.females || 0;
-            activeMales = data.males || 0;
-            activeFlockCount = activeFemales + activeMales;
-            flockEntryDate = data.entryDate || '';
-            
-            if(document.getElementById('activeMothersCount')) document.getElementById('activeMothersCount').innerText = activeFlockCount;
-            if(document.getElementById('activeFemalesCount')) document.getElementById('activeFemalesCount').innerText = activeFemales;
-            if(document.getElementById('activeMalesCount')) document.getElementById('activeMalesCount').innerText = activeMales;
-            
-            if(document.getElementById('manualFemalesCount')) document.getElementById('manualFemalesCount').value = activeFemales;
-            if(document.getElementById('manualMalesCount')) document.getElementById('manualMalesCount').value = activeMales;
-            if(document.getElementById('flockEntryDateInput') && flockEntryDate) document.getElementById('flockEntryDateInput').value = flockEntryDate;
-
-            const badge = document.getElementById('fertilityBadge');
-            if(badge && activeFlockCount > 0) {
-                const maleRatio = activeMales / (activeFemales || 1); 
-                let fertilityRate = 0;
-                if (maleRatio >= 0.33 && maleRatio <= 0.5) { 
-                    fertilityRate = 92; badge.style.background = 'var(--success)';
-                } else if (maleRatio > 0.5) { 
-                    fertilityRate = 80; badge.style.background = 'var(--warning)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (تكدس ذكور)`;
-                } else if (maleRatio >= 0.2) { 
-                    fertilityRate = 75; badge.style.background = 'var(--warning)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (نقص ذكور)`;
-                } else {
-                    fertilityRate = 50; badge.style.background = 'var(--danger)'; badge.innerHTML = `إخصاب: ${fertilityRate}% (خطر)`;
-                }
-                if(fertilityRate >= 90) badge.innerHTML = `إخصاب متوقع: ${fertilityRate}% (مثالي)`;
-            }
-
-            if(flockEntryDate) {
-                const entryD = new Date(flockEntryDate);
-                const now = new Date();
-                const diffTime = Math.abs(now - entryD);
-                currentFlockAgeWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-                if(document.getElementById('flockAgeDisplay')) document.getElementById('flockAgeDisplay').innerText = currentFlockAgeWeeks;
-            }
-        }
-    } catch(e) { console.error(e); }
-});
-
-onValue(ref(db, "inventory/readyEggsStock"), (snapshot) => {
-    accumulatedGoodEggs = snapshot.exists() ? snapshot.val() : 0;
-    if(document.getElementById('readyEggsCount')) document.getElementById('readyEggsCount').innerText = accumulatedGoodEggs;
-    if(document.getElementById('availEggsForShelf')) document.getElementById('availEggsForShelf').innerText = accumulatedGoodEggs;
-});
-
-window.updateFlockLedger = async () => {
-    try {
-        const fCount = parseInt(document.getElementById('manualFemalesCount')?.value) || 0;
-        const mCount = parseInt(document.getElementById('manualMalesCount')?.value) || 0;
-        const dateInput = document.getElementById('flockEntryDateInput')?.value || '';
-        const cost = parseFloat(document.getElementById('flockInitialCost')?.value) || 0;
-        
-        if(fCount < 0 || mCount < 0) return showToast("برجاء إدخال أرقام صحيحة!", true);
-        if(!dateInput) return showToast("برجاء تحديد تاريخ الدخول!", true);
-        
-        await set(ref(db, "inventory/flockData"), { females: fCount, males: mCount, entryDate: dateInput });
-        
-        if (cost > 0) {
-            await push(ref(db, 'ledger'), { 
-                type: 'out', 
-                amount: cost, 
-                desc: `تأسيس/تجديد قطيع أمهات (${fCount} إناث، ${mCount} ذكور)`, 
-                batchId: 'general', 
-                date: new Date().toISOString().split('T')[0], 
-                timestamp: Date.now() 
-            });
-            await set(ref(db, "cashBox"), manualCash - cost);
-        }
-        
-        closeModal('modalFlockUpdate');
-        showToast("تم تأسيس القطيع وحفظ التكاليف بنجاح 🕊️");
-    } catch (error) {
-        console.error(error);
-        showToast("حدث خطأ أثناء الحفظ.", true);
-    }
-};
-
-window.saveBreederDailyLog = async () => {
-    try {
-        const deadF = parseInt(document.getElementById('bdDeadFemales')?.value) || 0;
-        const deadM = parseInt(document.getElementById('bdDeadMales')?.value) || 0;
-        const feed = parseFloat(document.getElementById('bdFeed')?.value) || 0;
-        
-        if (deadF === 0 && deadM === 0 && feed === 0) return showToast("أدخل بيانات صحيحة", true);
-        if (deadF > activeFemales || deadM > activeMales) return showToast("النافق أكبر من الموجود!", true);
-        if (feed > currentFeedStock) return showToast(`رصيد العلف لا يكفي! المتاح ${currentFeedStock} كجم`, true);
-
-        const today = new Date().toISOString().split('T')[0];
-
-        await set(ref(db, "inventory/flockData/females"), activeFemales - deadF);
-        await set(ref(db, "inventory/flockData/males"), activeMales - deadM);
-        
-        await push(ref(db, 'breedersHistoryLogs'), { date: today, deadFemales: deadF, deadMales: deadM, feedConsumed: feed, timestamp: Date.now() });
-
-        if (feed > 0) {
-            await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
-            const feedCost = feed * (globalSettings.feedPrice || 30);
-            await push(ref(db, 'ledger'), { 
-                type: 'batch_cost', 
-                amount: feedCost, 
-                desc: `استهلاك علف أمهات بياض (${feed} كجم)`, 
-                batchId: 'general', 
-                date: today, 
-                timestamp: Date.now() 
-            });
-        }
-        
-        closeModal('modalBreederDaily');
-        showToast("تم تسجيل يومية الأمهات بامتياز 📝");
-    } catch(e) { console.error(e); showToast("خطأ في التسجيل", true); }
-};
-
-window.openBreederGuide = () => {
-    try {
-        if(activeFlockCount === 0) return showToast("الرجاء إدخال قطيع أولاً!", true);
-        
-        let feedRec = (activeFlockCount * 0.033).toFixed(1); 
-        let waterRec = (feedRec * 2.5).toFixed(1); 
-        let lightRec = "14 إلى 16 ساعة متصلة (لتحفيز الغدة النخامية للبيض)";
-        let tempRec = "21°C - 24°C";
-        let proteinRec = "علف بياض (بروتين 18% إلى 20%، كالسيوم 2.5% إلى 3%)";
-        
-        let adviceHtml = `
-        <div style="background:var(--bg-main); padding:15px; border-radius:12px; border:1px solid var(--border);">
-            <div style="text-align:center; margin-bottom:15px;">
-                <span style="font-size:14px; color:var(--text-secondary);">عمر القطيع:</span>
-                <span style="font-size:18px; color:#8b5cf6; font-weight:800;">${currentFlockAgeWeeks} أسبوع</span>
             </div>
             
-            <div class="grid-2" style="gap:10px;">
-                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--danger);">
-                    <div style="font-size:12px; color:var(--text-secondary);">🌡️ الحرارة</div>
-                    <div style="font-size:16px; font-weight:bold;">${tempRec}</div>
-                </div>
-                <div style="background:var(--surface); padding:10px; border-radius:8px; border-right:4px solid var(--warning);">
-                    <div style="font-size:12px; color:var(--text-secondary);">💡 الإضاءة</div>
-                    <div style="font-size:14px; font-weight:bold;">${lightRec}</div>
+            <div class="card">
+                <div class="card-header">ملخص المزرعة <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal;">(اضغط للتفاصيل)</span></div>
+                <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));">
+                    <div class="stat-box" style="cursor: pointer;" onclick="switchPage('incubator')">بالماكينة<span class="num" id="dashEggs">0</span></div>
+                    <div class="stat-box" style="cursor: pointer;" onclick="switchPage('rearing')">بالعنابر<span class="num" id="dashChicks">0</span></div>
+                    <div class="stat-box" style="border-color:var(--success); cursor: pointer;" onclick="switchPage('freezer')">بالفريزر<span class="num text-success" id="dashFreezer">0</span></div>
+                    <div class="stat-box" style="border-color:var(--warning); cursor: pointer;" onclick="switchPage('finance')">مبيعات<span class="num text-warning" id="dashSales">0</span></div>
+                    <div class="stat-box" style="border-color:var(--info); cursor: pointer;" onclick="switchPage('inventory')">رأس المال<span class="num text-info" id="dashInventoryTotal">0</span><span style="font-size: 10px;">ج.م</span></div>
                 </div>
             </div>
-
-            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--success);">
-                <div style="font-size:12px; color:var(--text-secondary);">🌾 احتياج العلف اليومي (${activeFlockCount} طائر)</div>
-                <div style="font-size:20px; font-weight:bold; color:var(--success);">${feedRec} كجم</div>
-                <div style="font-size:12px; color:var(--text-secondary); margin-top:5px;">المواصفة: ${proteinRec}</div>
+            
+            <div class="card" style="border-right: 4px solid var(--warning);">
+                <div class="card-header" style="color:var(--warning);"><i class="fas fa-wheat-awn"></i> مخزن العلف العيني</div>
+                <div style="text-align: center;">
+                    <span style="font-size: 14px; color: var(--text-secondary);">الرصيد الحالي بالمخزن</span>
+                    <div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--text-primary);" id="feedStockDisplay">0 كجم</div>
+                </div>
+                <button class="btn" style="background:transparent; border: 1px dashed var(--warning); color:var(--text-primary); margin-top:15px; font-size:14px;" onclick="openModal('modalBuyFeed')"><i class="fas fa-truck-loading"></i> توريد كمية جديدة للمخزن</button>
             </div>
 
-            <div style="background:var(--surface); padding:10px; border-radius:8px; margin-top:10px; border-right:4px solid var(--info);">
-                <div style="font-size:12px; color:var(--text-secondary);">💧 احتياج المياه اليومي</div>
-                <div style="font-size:20px; font-weight:bold; color:var(--info);">${waterRec} لتر</div>
+            <div class="card" style="border: 1px solid var(--danger); background: rgba(239, 68, 68, 0.03);">
+                <div class="card-header" style="color:var(--danger); border:none; margin:0; padding:0;">
+                    <i class="fas fa-bell"></i> لوحة الإشعارات والتنبيهات 🔔
+                </div>
+                <div id="alertsContainer" style="margin-top: 15px; font-size: 14px; line-height: 1.6; color:var(--text-secondary);">
+                    جاري التحميل...
+                </div>
             </div>
         </div>
-        `;
-
-        if (currentFlockAgeWeeks > 28) {
-            adviceHtml += `
-            <div style="background: rgba(220,38,38,0.1); padding:10px; border-radius:8px; margin-top:10px; color:var(--danger); border:1px dashed var(--danger);">
-                <strong>⚠️ تنبيه استراتيجي:</strong> القطيع تخطى 28 أسبوع، إنتاجية البيض ونسبة الإخصاب ستبدأ في الانحدار السريع. يُنصح بتجهيز قطيع "إحلال" الآن للحفاظ على استمرارية الإنتاج.
-            </div>`;
-        }
-
-        document.getElementById('breederGuideContent').innerHTML = adviceHtml;
-        openModal('modalBreederGuide');
-    } catch(e) { console.error(e); }
-};
-
-window.toggleTriagePeriod = () => {
-    try {
-        const mode = document.getElementById('triagePeriodMode')?.value;
-        const el = document.getElementById('triagePeriodDates');
-        if(el) el.style.display = mode === 'period' ? 'grid' : 'none';
-    } catch(e) { console.error(e); }
-};
-
-window.processTriage = async () => {
-    try {
-        const total = parseInt(document.getElementById('triageTotal')?.value) || 0;
-        const bad = parseInt(document.getElementById('triageBad')?.value) || 0;
-        const mode = document.getElementById('triagePeriodMode')?.value || 'daily';
-        
-        if(total <= 0) return showToast("أدخل إجمالي البيض", true);
-        if(bad > total) return showToast("البيض المستبعد أكبر من الكلي!", true);
-        if(activeFemales <= 0) return showToast("قم بتسجيل عدد الإناث أولاً!", true);
-
-        let daysCount = 1;
-        let dateText = "الإنتاج اليومي";
-
-        if (mode === 'period') {
-            const start = document.getElementById('triageStartDate')?.value;
-            const end = document.getElementById('triageEndDate')?.value;
-            if (!start || !end) return showToast("برجاء تحديد تواريخ الفترة (من / إلى)", true);
+   
+        <div id="breeders" class="page-view">
+            <div class="header-title">
+                <span>إدارة الأمهات والمفرخ (PTO C 10)</span>
+                <button class="btn btn-warning btn-sm" onclick="openModal('modalFlockUpdate')"><i class="fas fa-heartbeat"></i> تحديث القطيع (نافق/استبعاد)</button>
+            </div>
             
-            const d1 = new Date(start);
-            const d2 = new Date(end);
-            if(d2 < d1) return showToast("تاريخ النهاية يجب أن يكون بعد البداية", true);
+            <!-- لوحة القطيع الثابتة (النسخة الذكية) -->
+            <div class="card" style="border-right: 4px solid var(--info);">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span><i class="fas fa-chart-line"></i> حالة قطيع أمهات السمان</span>
+                    <span id="fertilityBadge" class="badge" style="background:var(--success);">إخصاب متوقع: 0%</span>
+                </div>
+                <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));">
+                    <div class="stat-box">إجمالي القطيع<span class="num text-info" id="activeMothersCount">0</span></div>
+                    <div class="stat-box" style="border-color: #f472b6;">إناث (بياض)<span class="num" style="color: #f472b6;" id="activeFemalesCount">0</span></div>
+                    <div class="stat-box" style="border-color: #38bdf8;">ذكور (تلقيح)<span class="num" style="color: #38bdf8;" id="activeMalesCount">0</span></div>
+                    <div class="stat-box">عمر القطيع<span class="num text-warning" id="flockAgeDisplay">0</span><span style="font-size:10px;">أسبوع</span></div>
+                    <div class="stat-box">بيض للمكنة<span class="num text-success" id="readyEggsCount">0</span></div>
+                </div>
+                
+                <div class="grid-2" style="margin-top: 15px;">
+                    <button class="btn btn-primary" style="margin-top: 0; padding: 12px; font-size: 14px;" onclick="openModal('modalDailyTriage')">
+                        <i class="fas fa-egg"></i> فرز البيض (تحليل)
+                    </button>
+                    <button class="btn btn-info" style="margin-top: 0; padding: 12px; font-size: 14px; background: #8b5cf6;" onclick="openBreederGuide()">
+                        <i class="fas fa-brain"></i> دليل الأمهات الذكي
+                    </button>
+                </div>
+            </div>
 
-            const diffTime = Math.abs(d2 - d1);
-            daysCount = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1; 
-            dateText = `إنتاج متراكم (${daysCount} أيام)`;
-        }
+            <!-- الخريطة التفاعلية للمكنة -->
+            <div class="card">
+                <div class="card-header"><i class="fas fa-server"></i> خريطة المكنة التفاعلية (PTO C 10)</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;">
+                    اضغط على الرف لإدخال دفعة جديدة أو تفريغه. الأرفف الملونة مشغولة ويتم حساب تواريخها.
+                </div>
+                <!-- سيتم رسم الأرفف هنا برمجياً -->
+                <div id="incubatorGrid" class="grid-2" style="gap: 10px;"></div>
+            </div>
+        </div>
 
-        const good = total - bad;
-        const validRate = ((good / total) * 100).toFixed(1);
+    <div id="modalFlockUpdate" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalFlockUpdate')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--warning);">إعداد قطيع الأمهات (تأسيس)</h3>
+            
+            <div class="grid-2">
+                <div><label>عدد الإناث (السمّانات)</label><input type="number" id="manualFemalesCount" placeholder="مثال: 750"></div>
+                <div><label>عدد الذكور</label><input type="number" id="manualMalesCount" placeholder="مثال: 250"></div>
+            </div>
+            <div class="grid-2">
+                <div><label>تاريخ دخول القطيع</label><input type="date" id="flockEntryDateInput"></div>
+                <div><label>تكلفة شراء/تجهيز القطيع (ج.م)</label><input type="number" id="flockInitialCost" placeholder="ستسجل في الحسابات"></div>
+            </div>
+            
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; margin-top: 10px; background: var(--bg-main); padding: 10px; border-radius: 8px;">* النظام سيقوم بحساب نسبة الإخصاب تلقائياً بناءً على النسبة بين الذكور والإناث (المعيار للسمان 1 ذكر لكل 2 إلى 3 إناث).</div>
+            <button class="btn btn-warning" onclick="updateFlockLedger()">حفظ وتأسيس القطيع</button>
+        </div>
+    </div>
+
+    <!-- نافذة يوميات الأمهات (علف ونافق) -->
+    <div id="modalBreederDaily" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalBreederDaily')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: #8b5cf6;"><i class="fas fa-clipboard-list"></i> يوميات الأمهات (علف ونافق)</h3>
+            <div class="grid-2">
+                <div><label>نافق إناث</label><input type="number" id="bdDeadFemales" value="0"></div>
+                <div><label>نافق ذكور</label><input type="number" id="bdDeadMales" value="0"></div>
+            </div>
+            <label>علف بياض مستهلك اليوم (كجم)</label>
+            <input type="number" id="bdFeed" value="0" placeholder="سيخصم من مخزن العلف">
+            <button class="btn" style="background: #8b5cf6; margin-top: 20px; color: white; width: 100%; padding: 14px; border-radius: 12px; font-weight: bold; border: none; cursor: pointer;" onclick="saveBreederDailyLog()">تسجيل اليومية</button>
+        </div>
+    </div>
+
+    <!-- نافذة الدليل الذكي للأمهات -->
+    <div id="modalBreederGuide" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalBreederGuide')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: #8b5cf6;"><i class="fas fa-brain"></i> مستشار أمهات السمان</h3>
+            <div id="breederGuideContent" style="margin-top: 15px; line-height: 1.8;"></div>
+            <button class="btn btn-info" style="margin-top: 20px;" onclick="closeModal('modalBreederGuide')">حسناً، عُلم 👍</button>
+        </div>
+    </div>
+
+
+
+        <!-- نافذة الفرز والمستشار الذكي (نسخة الفترات) -->
+        <div id="modalDailyTriage" class="modal-overlay">
+            <div class="modal-content">
+                <button class="close-modal" onclick="closeModal('modalDailyTriage')"><i class="fas fa-times"></i></button>
+                <h3 style="margin-top: 0; color: var(--primary);">المستشار الفني - فرز البيض</h3>
+                
+                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="margin-top: 0;">نظام التسجيل</label>
+                    <select id="triagePeriodMode" onchange="toggleTriagePeriod()">
+                        <option value="daily">تسجيل يومي (إنتاج اليوم فقط)</option>
+                        <option value="period">تجميع فترة (تسجيل عن عدة أيام متصلة)</option>
+                    </select>
+                </div>
+
+                <div id="triagePeriodDates" class="grid-2" style="display: none; background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed var(--primary); margin-bottom: 15px;">
+                    <div><label style="margin-top: 0;">من يوم</label><input type="date" id="triageStartDate"></div>
+                    <div><label style="margin-top: 0;">إلى يوم</label><input type="date" id="triageEndDate"></div>
+                </div>
+
+                <div class="grid-2">
+                    <div><label>البيض الكلي (المنتج)</label><input type="number" id="triageTotal" value="0"></div>
+                    <div><label>البيض المستبعد/المكسور</label><input type="number" id="triageBad" value="0"></div>
+                </div>
+                <button class="btn btn-primary" onclick="processTriage()">تم (تحليل وحفظ)</button>
+            </div>
+        </div>
+
+
+        <!-- نافذة التقرير الذكي (تظهر بعد الفرز) -->
+        <div id="modalTriageReport" class="modal-overlay">
+            <div class="modal-content">
+                <button class="close-modal" onclick="closeModal('modalTriageReport')"><i class="fas fa-times"></i></button>
+                <h3 style="margin-top: 0; text-align: center;">📊 التقرير الفني لإنتاج اليوم</h3>
+                <div id="triageReportContent" style="font-size: 14px; line-height: 1.8;"></div>
+                <button class="btn btn-info" onclick="closeModal('modalTriageReport')" style="margin-top: 20px;">حسناً، تم الاطلاع</button>
+            </div>
+        </div>
+
+        <!-- إعداد رف المكنة (الدفعة المجمعة) -->
+        <div id="modalShelfSetup" class="modal-overlay">
+            <div class="modal-content">
+                <button class="close-modal" onclick="closeModal('modalShelfSetup')"><i class="fas fa-times"></i></button>
+                <h3 style="margin-top: 0; color: var(--info);">تكوين دفعة جديدة (ابتداءً من رف <span id="selectedShelfNum"></span>)</h3>
+                <input type="hidden" id="selectedShelfId">
+                
+                <div style="background: var(--bg-main); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-weight: bold;">
+                    البيض المتوفر للتحضين: <span id="availEggsForShelf" style="color:var(--success);">0</span>
+                </div>
+
+                <label>نطاق التعبئة (لتكوين دفعة واحدة)</label>
+                <select id="shelfLoadType" onchange="toggleShelfInputs()">
+                    <option value="single">تعبئة هذا الرف فقط (دفعة مخصصة)</option>
+                    <option value="multi">تعبئة عدة أرفف معاً (كدفعة واحدة)</option>
+                    <option value="full">ملء كل الأرفف الفارغة (كدفعة واحدة)</option>
+                </select>
+
+                <div id="multiShelfContainer" style="display: none; background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed var(--primary); margin-top: 10px;">
+                    <label style="margin-top: 0;">كم رف تريد تعبئته في هذه الدفعة؟</label>
+                    <input type="number" id="multiShelfCount" value="1" oninput="calcShelfDist()">
+                </div>
+
+                <div id="shelfQtyContainer">
+                    <label>إجمالي عدد البيض لهذه الدفعة</label>
+                    <input type="number" id="shelfLoadQty" oninput="calcShelfDist()">
+                    <div id="shelfDistHint" style="font-size:12px; color:var(--info); margin-top:5px; font-weight:bold;"></div>
+                </div>
+
+                <label>تاريخ الدخول للمكنة</label>
+                <input type="datetime-local" id="shelfLoadDate">
+
+                <button class="btn btn-success" onclick="loadIncubatorShelf()">تأكيد وتكوين الدفعة</button>
+            </div>
+        </div>
+
+        <div id="incubator" class="page-view"><div class="header-title">إدارة التفريخ والمفقس</div><div id="incubatorList"></div></div>
+        <div id="rearing" class="page-view"><div class="header-title">عنابر التربية والذبح</div><div id="rearingList"></div><div class="card-header text-danger" style="margin-top:20px;">قيد الذبح والتجهيز</div><div id="slaughterList"></div></div>
         
-        const expectedTotalEggs = activeFemales * daysCount;
-        const prodRate = ((total / expectedTotalEggs) * 100).toFixed(1);
+        <div id="freezer" class="page-view">
+            <div class="header-title">
+                <span>المخزون والفريزر</span>
+                <button class="btn btn-primary" onclick="openModal('modalManageFreezer')" style="padding: 8px 16px;">
+                    <i class="fas fa-cog"></i> صنف جديد / إدارة الأصناف
+                </button>
+            </div>          
+            <div class="card">
+                <div class="card-header">الأرصدة الحالية الشاملة</div>
+                <div class="grid-3" id="freezerGrid" style="margin-top: 15px;"></div>
+            </div>      
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    سجل الإيداعات ومتابعة التخزين
+                    <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="toggleLogDeletion()">
+                        <i class="fas fa-trash-alt"></i> إدارة الحذف
+                    </button>
+                </div>
+                <div id="freezerLogs"></div>
+            </div>
+        </div>  
+        <!-- بداية صفحة جرد المعدات (رأس المال الثابت) -->
+        <div id="inventory" class="page-view">
+            <div class="header-title">
+                <span>جرد المعدات ورأس المال</span>
+                <button class="btn btn-info btn-sm" onclick="openModal('modalManageInventory')">
+                    <i class="fas fa-plus"></i> إضافة/تعديل صنف
+                </button>
+            </div>
+            
+            <div class="card" style="border-right: 4px solid var(--info); text-align: center;">
+                <span style="font-size: 14px; color: var(--text-secondary);">إجمالي رأس المال الثابت (المعدات)</span>
+                <div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--info);" id="inventoryTotalValue">0 ج.م</div>
+            </div>
 
-        let reportHtml = `<div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-bottom:15px;">
-            <strong style="color:var(--primary);">${dateText}:</strong> ${total} بيضة من ${activeFemales} أنثى بياضة.<br>
-            <strong style="color:var(--success);">البيض الصالح للمكنة:</strong> ${good} (${validRate}%)<br>
-            <strong style="color:var(--danger);">البيض المستبعد:</strong> ${bad}
-        </div>`;
+            <div class="card">
+                <div class="card-header">سجل المعدات الحالي</div>
+                <div id="inventoryList" style="margin-top: 15px;">
+                    <!-- سيتم رسم الأصناف هنا بواسطة الجافاسكربت -->
+                </div>
+            </div>
+        </div>
+        <!-- نهاية صفحة جرد المعدات -->
 
-        let warnings = '';
-        if(currentFlockAgeWeeks > 28) {
-            warnings += `<li style="margin-bottom: 5px; color: var(--danger);"><strong>تنبيه إحلال:</strong> القطيع وصل لعمر (${currentFlockAgeWeeks} أسبوع).</li>`;
+        <div id="finance" class="page-view">
+            <div class="header-title">     <span>الماليات والنتائج</span>     <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="resetFinancials()">         <i class="fas fa-broom"></i> تصفير الدفتر     </button> </div>
+            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
+            <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
+          <div class="search-bar-container">
+    
+    <input type="text" 
+           class="search-input"
+           placeholder="🔍 ابحث هنا..." 
+           onkeyup="searchLedger(this.value)">
+    
+    <select class="search-select" 
+            onchange="filterLedger(this.value)">
+        <option value="all">الكل 📜</option>
+        <option value="in">وارد 🟢</option>
+        <option value="out">مصروف 🔴</option>
+        <option value="batch_cost">سحب عيني 🟡</option>
+    </select>
+    
+</div>
+
+ 
+            <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
+        </div>
+
+        <div id="settingsPage" class="page-view">
+            <div class="header-title" style="margin-bottom: 20px;">
+                <span><i class="fas fa-sliders-h"></i> مركز التحكم الشامل (Settings)</span>
+            </div>
+            
+            <div class="settings-layout">
+                <div class="settings-sidebar">
+                    <div class="settings-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="ابحث في الإعدادات...">
+                    </div>
+                    
+                    <div class="settings-group">
+                        <div class="settings-group-title">الأساسيات</div>
+                        <div class="settings-nav-item active" onclick="switchSettingsTab('general', this)"><i class="fas fa-globe"></i> General</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('appearance', this)"><i class="fas fa-paint-brush"></i> Appearance</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('farmOps', this)"><i class="fas fa-tractor"></i> Farm Operations</div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <div class="settings-group-title">النظام والبيانات</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('tables', this)"><i class="fas fa-table"></i> Tables & Data</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('backup', this)"><i class="fas fa-cloud-download-alt"></i> Backup & Sync</div>
+                        <div class="settings-nav-item" onclick="switchSettingsTab('security', this)"><i class="fas fa-shield-alt"></i> Security</div>
+                    </div>
+                </div>
+
+                <div class="settings-content-area">
+                    
+                    <div id="tab-general" class="settings-tab active">
+                        <h2><i class="fas fa-globe"></i> General Settings</h2>
+                        <p class="settings-desc">إعدادات الهوية العامة للسيستم والتوطين.</p>
+                        
+                        <div class="settings-card">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>اسم النظام (System Name)</h4>
+                                    <span>الاسم الذي يظهر في أعلى القائمة والفواتير</span>
+                                </div>
+                                <input type="text" value="Saman Hehia ERP" style="width: 200px;">
+                            </div>
+                            <hr class="setting-divider">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>لغة النظام (Language)</h4>
+                                    <span>تغيير واجهة المستخدم (يتطلب إعادة تحميل)</span>
+                                </div>
+                                <select style="width: 200px;">
+                                    <option>العربية (Arabic)</option>
+                                    <option>English</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-appearance" class="settings-tab">
+                        <h2><i class="fas fa-paint-brush"></i> Appearance & Themes</h2>
+                        <p class="settings-desc">تحكم في ألوان النظام والوضع الليلي لراحة عينيك.</p>
+                        
+                        <div class="settings-card">
+                            <h4 style="margin-bottom: 15px;">الوضع العام (System Theme)</h4>
+                            <div class="grid-2" style="gap: 15px;">
+                                <div class="theme-option" onclick="setThemeMode('light', this)">
+                                    <i class="fas fa-sun" style="font-size: 24px; margin-bottom: 10px; color: #f59e0b;"></i>
+                                    <div style="font-weight: bold;">الوضع الفاتح (Light)</div>
+                                </div>
+                                <div class="theme-option" onclick="setThemeMode('dark', this)">
+                                    <i class="fas fa-moon" style="font-size: 24px; margin-bottom: 10px; color: #3b82f6;"></i>
+                                    <div style="font-weight: bold;">الوضع الليلي (Dark)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <h4 style="margin-bottom: 15px;">لون النظام الأساسي (Accent Color)</h4>
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div class="color-circle" style="background: #2563eb;" onclick="setPrimaryColor('#2563eb', this)" title="أزرق (افتراضي)"></div>
+                                <div class="color-circle" style="background: #10b981;" onclick="setPrimaryColor('#10b981', this)" title="أخضر طبي"></div>
+                                <div class="color-circle" style="background: #8b5cf6;" onclick="setPrimaryColor('#8b5cf6', this)" title="بنفسجي"></div>
+                                <div class="color-circle" style="background: #f43f5e;" onclick="setPrimaryColor('#f43f5e', this)" title="أحمر وردي"></div>
+                                <div class="color-circle" style="background: #f59e0b;" onclick="setPrimaryColor('#f59e0b', this)" title="عنبري"></div>
+                                <div class="color-circle" style="background: #0f172a;" onclick="setPrimaryColor('#0f172a', this)" title="كحلي داكن"></div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div id="tab-farmOps" class="settings-tab">
+                        <h2><i class="fas fa-tractor"></i> Farm Operations</h2>
+                        <p class="settings-desc">تسعير الإنتاج، أنواع الطيور، وتكاليف العلف التشغيلية.</p>
+                        
+                        <div class="settings-card">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>نوع الطائر الافتراضي</h4>
+                                    <span>الطائر الذي يظهر كخيار أول عند إضافة دفعة</span>
+                                </div>
+                                <select id="setBirdType" style="width: 200px;">
+                                    <option value="quail">سمان</option>
+                                    <option value="chicken">فراخ بيضاء</option>
+                                    <option value="turkey">رومي</option>
+                                </select>
+                            </div>
+                            <hr class="setting-divider">
+                            <div class="setting-row">
+                                <div>
+                                    <h4>سعر كيلو العلف (ج.م)</h4>
+                                    <span>يُستخدم في حساب التكلفة اليومية للقطيع</span>
+                                </div>
+                                <input type="number" id="setFeed" value="30" style="width: 150px;">
+                            </div>
+                        </div>
+
+                        <div class="settings-card" style="margin-top: 20px;">
+                            <h4 style="margin-bottom: 15px; color: var(--primary);">💰 تسعير كتاكيت وبيض المفرخ</h4>
+                            <div class="grid-2">
+                                <div><label>كتكوت السمان</label><input type="number" id="setQuailChick" value="3.5"></div>
+                                <div><label>كتكوت الفراخ</label><input type="number" id="setChickenChick" value="25"></div>
+                                <div><label>كتكوت الرومي</label><input type="number" id="setTurkeyChick" value="60"></div>
+                                <div><label>بيضة الرومي</label><input type="number" id="setTurkeyEgg" value="10"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- بداية الكود الجديد المضاف (إعدادات مكنة التفريخ) -->
+                        <div class="settings-card" style="margin-top: 20px;">
+                            <h4 style="margin-bottom: 15px; color: var(--primary);">⚙️ إعدادات مكنة التفريخ الذكية</h4>
+                            <div class="grid-2">
+                                <div><label>عدد الأرفف بالمكنة</label><input type="number" id="setIncShelves" value="5" oninput="calcBreederStats()"></div>
+                                <div><label>سعة الرف الواحد (بيضة)</label><input type="number" id="setIncShelfCapacity" value="100" oninput="calcBreederStats()"></div>
+                            </div>
+                            <div style="margin-top: 15px; font-size: 13px; color: var(--text-secondary); text-align: center; background: var(--bg-main); padding: 10px; border-radius: 8px;">
+                                السعة الإجمالية المطلوبة لتشغيل المكنة: <strong id="incTotalCapacityDisplay" style="color:var(--primary); font-size: 16px;">500</strong> بيضة
+                            </div>
+                        </div>
+                        <!-- نهاية الكود المضاف -->
+
+                        <div style="margin-top: 20px; text-align: left;">
+                            <button class="btn btn-primary" onclick="saveSettings()">حفظ إعدادات التشغيل 💾</button>
+                        </div>
+                    </div>
+
+
+                    <div id="tab-backup" class="settings-tab">
+                        <h2><i class="fas fa-cloud-download-alt"></i> Backup & Reset</h2>
+                        <p class="settings-desc">أمان بياناتك ونسخها الاحتياطي.</p>
+                        
+                        <div class="settings-card" style="border: 1px solid var(--danger);">
+                            <div class="setting-row">
+                                <div>
+                                    <h4 style="color: var(--danger);">تصفير النظام بالكامل (Factory Reset)</h4>
+                                    <span style="color: var(--text-secondary);">سيتم مسح جميع الدفعات والمخازن والخزنة للأبد.</span>
+                                </div>
+                                <button class="btn btn-danger" onclick="resetSystem()">تأكيد التصفير ⚠️</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalBatch" class="modal-overlay">
+        <div class="modal-content" style="max-height: 95vh;">
+            <button class="close-modal" onclick="closeModal('modalBatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">🥚 إدخال دفعة جديدة</h3>
+            
+            <label>نوع الطائر</label>
+            <select id="bBirdType" onchange="autoCalcDates()">
+                <option value="quail">سمان</option>
+                <option value="chicken">فراخ بيضاء</option>
+                <option value="turkey">رومي</option>
+            </select>
+            
+            <label>اسم الدفعة (يُكتب تلقائياً بالتاريخ)</label>
+            <input type="text" id="bName" readonly placeholder="اختر تاريخ الدخول لتوليد الاسم تلقائياً" class="input-readonly">
+            
+            <div class="grid-2">
+                <div><label>البيض الكلي</label><input type="number" id="bEggs"></div>
+                <div><label>تاريخ الدخول</label><input type="datetime-local" id="bDate" onchange="autoCalcDates(); document.getElementById('bName').value = 'دفعة ' + this.value.split('T')[0];"></div>
+            </div>
+
+            
+            <div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--border);">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">تعديل التواريخ المتوقعة 📅</h4>
+                <div class="grid-2">
+                    <div><label style="margin-top:0;">للنزول للمفقس</label><input type="datetime-local" id="bHatcherDate"></div>
+                    <div><label style="margin-top:0;">موعد الفقس</label><input type="datetime-local" id="bHatchDate"></div>
+                </div>
+                <div class="grid-2">
+                    <div><label>عمر الذبح (أيام)</label><input type="number" id="bSlaughterDays" value="40" oninput="autoCalcDates()"></div>
+                    <div><label>تاريخ الذبح</label><input type="datetime-local" id="bSlaughterDate"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-info" onclick="saveNewBatch()">بدء الدورة</button>
+        </div>
+    </div>
+    
+    <div id="modalEditBatch" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalEditBatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">✏️ تعديل بيانات الدفعة</h3>
+            
+            <input type="hidden" id="editBatchId">
+            <input type="hidden" id="editBatchStage"> <!-- حقل مخفي لمعرفة مرحلة الدفعة -->
+            
+            <label>اسم الدفعة</label>
+            <input type="text" id="editBName" readonly class="input-readonly">
+            
+            <div class="grid-2">
+                <div>
+                    <label>العدد الكلي (بيض/كتاكيت)</label>
+                    <input type="number" id="editBEggs">
+                </div>
+                <div>
+                    <label>تاريخ المرحلة</label>
+                    <input type="datetime-local" id="editBDate" onchange="
+                        let isRearing = document.getElementById('editBatchStage').value === 'rearing';
+                        let prefix = isRearing ? 'تربية ' : 'دفعة ';
+                        document.getElementById('editBName').value = prefix + this.value.split('T')[0];
+                    ">
+                </div>
+            </div>
+
+            <!-- قسم يظهر فقط إذا كانت الدفعة في مرحلة التربية (سيتم التحكم بظهوره عبر JavaScript) -->
+            <div id="editRearingSection" style="background: rgba(37, 99, 235, 0.05); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--primary); display: none;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">بيانات التربية والذبح 📅</h4>
+                <div class="grid-2">
+                    <div>
+                        <label style="margin-top: 0;">عمر الذبح (أيام)</label>
+                        <input type="number" id="editSlaughterAge">
+                    </div>
+                    <div>
+                        <label style="margin-top: 0;">تاريخ الذبح المتوقع</label>
+                        <input type="datetime-local" id="editSlaughterDate">
+                    </div>
+                </div>
+            </div>
+            
+            <button class="btn btn-info" style="margin-top: 25px;" onclick="saveEditBatch()">حفظ التعديلات</button>
+        </div>
+    </div>
+
+    <div id="modalDaily" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalDaily')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">📝 تسجيل يومي (سيُخصم العلف من المخزن)</h3><label>الدفعة</label><select id="dBatch"></select><div class="grid-2"><div><label>نافق</label><input type="number" id="dDead" value="0"></div><div><label>علف مستهلك (كجم)</label><input type="number" id="dFeed" value="0"></div></div><button class="btn btn-warning" onclick="saveDailyLog()">حفظ وخصم من المخزن</button></div></div>
+    
+    <div id="modalSale" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalSale')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--success);">🛒 فاتورة مبيعات</h3>
+            
+            <label>الصنف</label>
+            <select id="sGrade" onchange="calculateSaleTotal()">
+                <option value="royal">رويال</option>
+                <option value="super_special">سوبر سبشيال</option>
+                <option value="special">سبشيال</option>
+                <option value="jumbo">جامبو</option>
+                <option value="super">سوبر</option>
+                <option value="bad">كسر / فرز</option>
+            </select>
+            
+            <label>العدد (جوز)</label>
+            <input type="number" id="sQty" oninput="calculateSaleTotal()">
+            
+            <div style="background:var(--bg-main); padding:15px; border-radius:10px; border:1px solid var(--border); margin-top:15px; text-align:center;">
+                <span style="color:var(--text-secondary); font-size:14px;">المطلوب تحصيله</span>
+                <div id="saleTotalDisplay" style="font-size:30px; font-weight:800; color:var(--success);">0 ج.م</div>
+            </div>
+            
+            <button class="btn btn-success" onclick="processSale()">تأكيد البيع</button>
+        </div>
+    </div>
+    
+    <div id="modalExpense" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalExpense')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--danger);">💸 إذن صرف نقدي</h3><label>المبلغ المدفوع (ج.م)</label><input type="number" id="eAmount"><label>بند الصرف (إيجار، عمالة...)</label><input type="text" id="eType"><label>تحميل على الدفعة؟</label><select id="eBatch"><option value="general">مصروف عام</option></select><button class="btn btn-danger" onclick="saveTransaction('out')">تسجيل المصروف</button></div></div>
+    
+    <div id="modalBuyFeed" class="modal-overlay"><div class="modal-content"><button class="close-modal" onclick="closeModal('modalBuyFeed')"><i class="fas fa-times"></i></button><h3 style="margin-top: 0; color: var(--warning);">🌾 توريد علف للمخزن</h3><label>الكمية المشتراة (بالكيلو)</label><input type="number" id="bfQty" placeholder="مثال: 500"><label>إجمالي التكلفة المدفوعة (ج.م)</label><input type="number" id="bfTotalCost" placeholder="الفلوس اللي هتنقص من خزنتك"><button class="btn btn-warning" onclick="buyFeed()">تأكيد التوريد وخصم النقدية</button></div></div>
+    
+    <div id="modalHatch" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalHatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--primary);">🐣 إتمام الفقس ونقل للتربية</h3>
+            <input type="hidden" id="hatchBatchId">
+            
+            <div class="grid-2">
+                <div>
+                    <label>كتاكيت سليمة للتربية</label>
+                    <input type="number" id="hHealthy" style="font-size: 20px; color: var(--success); font-weight: bold;">
+                </div>
+                <div>
+                    <label style="color: var(--info);">نظام التربية (للمساحة)</label>
+                    <select id="hRearingSystem">
+                        <option value="floor">تربية أرضية (نشارة)</option>
+                        <option value="battery">تربية بطاريات (أقفاص)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid-2" style="margin-top: 15px;">
+                <div><label>غير مخصب</label><input type="number" id="hUnfert" value="0"></div>
+                <div><label>كبس/ميت</label><input type="number" id="hDead" value="0"></div>
+            </div>
+
+            <!-- الإضافات الجديدة: تاريخ التربية والاسم وعمر الذبح -->
+            <div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed var(--border);">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: var(--primary);">تحديث بيانات الدورة للتربية 📅</h4>
+                
+                <label style="margin-top: 0;">تاريخ النقل للتربية</label>
+                <input type="datetime-local" id="hRearingDate" onchange="document.getElementById('hNewBatchName').value = 'تربية ' + this.value.split('T')[0];">
+                
+                <label>الاسم الجديد للدفعة</label>
+                <input type="text" id="hNewBatchName" readonly class="input-readonly" placeholder="سيظهر الاسم الجديد هنا تلقائياً">
+                
+                <div class="grid-2">
+                    <div>
+                        <label>عمر الذبح (بالأيام)</label>
+                        <input type="number" id="hSlaughterAge" value="40">
+                    </div>
+                    <div>
+                        <label>تاريخ الذبح المتوقع</label>
+                        <input type="datetime-local" id="hExpectedSlaughterDate">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="moveToRearing()">تأكيد ونقل للتربية</button>
+        </div>
+    </div>
+
+    <div id="modalClassify" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalClassify')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color:var(--text-primary);">⚖️ تصنيف الدفعة</h3>
+            <input type="hidden" id="classBatchId">
+            
+            <div class="grid-2"></div>
+            
+            <button class="btn btn-success" onclick="finishSlaughter()">إنهاء الدورة وترحيل للفريزر</button>
+        </div>
+    </div>
+
+    <div id="modalManageFreezer" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalManageFreezer')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--text-primary);">⚙️ إدارة أصناف الفريزر</h3>
+            
+            <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 8px;">
+                <h4 style="margin-top: 0;">إضافة صنف جديد</h4>
+                <div class="grid-2">
+                    <div>
+                        <label>اسم الصنف (مثال: رويال، جامبو)</label>
+                        <input type="text" id="masterCatName" placeholder="أدخل اسم الصنف">
+                    </div>
+                    <div>
+                        <label>السعر الافتراضي (اختياري)</label>
+                        <input type="number" id="masterCatPrice" placeholder="السعر">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="addCategoryFromMaster()" style="margin-top: 15px;">➕ إضافة الصنف</button>
+            </div>
+
+            <h4>الأصناف الحالية</h4>
+            <div id="freezerCategoriesList" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px dashed var(--border); border-radius: 8px;">
+            </div>
+        </div>
+    </div>
+    <!-- نافذة إضافة وتعديل المعدات -->
+    <div id="modalManageInventory" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalManageInventory')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">🛠️ إضافة صنف للجرد (معدات)</h3>
+            
+            <label>اسم الصنف (مثال: طبق تحضين)</label>
+            <input type="text" id="invItemName" placeholder="أدخل اسم المعدة">
+            
+            <div class="grid-2">
+                <div>
+                    <label>العدد الإجمالي</label>
+                    <input type="number" id="invItemQty" placeholder="مثال: 100">
+                </div>
+                <div>
+                    <label>سعر الوحدة (ج.م)</label>
+                    <input type="number" id="invItemPrice" placeholder="مثال: 10">
+                </div>
+            </div>
+            
+            <button class="btn btn-info" style="margin-top: 20px;" onclick="addOrUpdateInventoryItem()">حفظ الصنف في الجرد</button>
+        </div>
+    </div>
+
+    <script>
+        function updateIcon() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const icon = document.getElementById('themeIcon');
+            if (currentTheme === 'dark') { icon.className = 'fas fa-sun'; icon.style.color = '#f59e0b'; } else { icon.className = 'fas fa-moon'; icon.style.color = '#0f172a'; }
         }
-        if(validRate >= 85) {
-            reportHtml += `<div style="color:var(--success); font-weight:bold; margin-bottom: 10px;">✅ جودة القشرة والفرز: ممتازة وطبيعية.</div>`;
-        } else {
-            warnings += `<li style="margin-bottom: 5px;"><strong>نسبة الفرز (${validRate}%) منخفضة:</strong> يجب ألا تقل عن 85%. راجع الكالسيوم وزحام الأقفاص.</li>`;
+        function toggleAppTheme() {
+            const root = document.documentElement;
+            const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', newTheme);
+            localStorage.setItem('saman_theme', newTheme);
+            updateIcon();
         }
-        if(prodRate >= 75) {
-            reportHtml += `<div style="color:var(--success); font-weight:bold;">✅ كفاءة الإنتاج (${prodRate}%): ممتازة ومطابقة للمعدلات.</div>`;
-        } else {
-            warnings += `<li><strong>كفاءة الإنتاج (${prodRate}%) ضعيفة:</strong> المعدل الطبيعي 75% فما فوق. راجع الإضاءة والعلف.</li>`;
-        }
-
-        if(warnings !== '') {
-            reportHtml += `<div style="background: rgba(220, 38, 38, 0.05); border: 1px solid var(--danger); padding: 15px; border-radius: 8px; color: var(--danger); margin-top: 15px;">
-                <h4 style="margin: 0 0 10px 0;"><i class="fas fa-exclamation-triangle"></i> توصيات المستشار الفني:</h4>
-                <ul style="margin: 0; padding-right: 15px;">${warnings}</ul>
-            </div>`;
-        }
-
-        await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs + good);
-        await push(ref(db, 'breedersLogs'), {
-            date: new Date().toISOString().split('T')[0],
-            mode: mode, daysCount: daysCount, females: activeFemales, flockAge: currentFlockAgeWeeks, total, bad, good, validRate, prodRate, timestamp: Date.now()
-        });
-
-        const reportContent = document.getElementById('triageReportContent');
-        if(reportContent) reportContent.innerHTML = reportHtml;
-        closeModal('modalDailyTriage');
-        openModal('modalTriageReport');
-    } catch(e) { console.error(e); }
-};
+        window.addEventListener('DOMContentLoaded', updateIcon);
+    </script>
+    <script type="module" src="./js/app.js"></script>
+    
+    <div id="modalDailyGuide" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalDailyGuide')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--primary);"><i class="fas fa-clipboard-check"></i> قائمة مهام العامل اليومية</h3>
+            <div id="dailyGuideContent" style="margin-top: 15px;"></div>
+            <button class="btn btn-primary" style="margin-top: 20px;" onclick="closeModal('modalDailyGuide')">حسناً، تم التنفيذ 👍</button>
+        </div>
+    </div>
+    
+    <div id="commandPalette" class="modal-overlay" style="align-items: flex-start; padding-top: 10vh;">
+        <div class="modal-content" style="max-width: 600px; width: 90%; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); padding: 0; overflow: hidden;">
+            <div style="padding: 15px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-search" style="color: var(--text-secondary);"></i>
+                <input type="text" id="cmdInput" placeholder="اكتب أمراً أو ابحث عن صفحة... (مثال: إضافة دفعة)" style="border: none; background: transparent; width: 100%; font-size: 16px; outline: none; color: var(--text-primary); font-family: 'Cairo';">
+                <span style="font-size: 11px; background: var(--bg-main); padding: 4px 8px; border-radius: 4px; color: var(--text-secondary); border: 1px solid var(--border);">ESC</span>
+            </div>
+            <div id="cmdResults" style="max-height: 350px; overflow-y: auto; padding: 10px;"></div>
+        </div>
+    </div>
 
 
-onValue(ref(db, "incubatorGrid"), (snapshot) => {
-    try {
-        incubatorShelves = snapshot.exists() ? snapshot.val() : {};
-        
-        if(globalSettings && globalSettings.setIncShelves) {
-            ptoSettings.shelves = globalSettings.setIncShelves;
-            ptoSettings.capacityPerShelf = globalSettings.setIncShelfCapacity;
-        } else {
-            ptoSettings.shelves = 12; 
-        }
-        
-        renderIncubatorGrid();
-    } catch(e) { console.error(e); }
-});
-
-function renderIncubatorGrid() {
-    try {
-        const grid = document.getElementById('incubatorGrid');
-        if(!grid) return;
-        grid.innerHTML = '';
-        const now = new Date();
-
-        for(let i = 1; i <= ptoSettings.shelves; i++) {
-            const shelf = incubatorShelves[`shelf_${i}`];
-            if(!shelf) {
-                grid.innerHTML += `<div onclick="openShelfSetup(${i})" style="background: var(--surface); border: 2px dashed var(--border); border-radius: 8px; padding: 15px; text-align: center; cursor: pointer; transition: 0.3s;" onmouseover="this.style.borderColor='var(--info)'" onmouseout="this.style.borderColor='var(--border)'">
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">الرف ${i}</div>
-                    <div style="color: var(--success); font-weight: bold;"><i class="fas fa-plus-circle"></i> فارغ جاهز للتحميل</div>
-                </div>`;
-            } else {
-                const insertDate = new Date(shelf.insertDate);
-                const hatchDate = new Date(insertDate);
-                hatchDate.setDate(insertDate.getDate() + 18); 
-
-                const daysLeft = Math.ceil((hatchDate - now) / 86400000);
-                let statusHtml = '';
-
-                if(daysLeft > 3) {
-                    statusHtml = `<span style="color: var(--info); font-size: 11px;">في التحضين (باقي ${daysLeft} يوم)</span>`;
-                } else if (daysLeft > 0) {
-                    statusHtml = `<span style="color: var(--warning); font-size: 11px; font-weight:bold;">انقله للمفقس! (باقي ${daysLeft} يوم)</span>`;
-                } else {
-                    statusHtml = `<span style="color: var(--danger); font-size: 11px; font-weight:bold;">موعد الفقس الآن 🐣</span>`;
-                }
-
-                grid.innerHTML += `<div style="background: rgba(37, 99, 235, 0.05); border: 1px solid var(--primary); border-radius: 8px; padding: 10px; text-align: center; position: relative;">
-                    <button onclick="emptyShelf(${i})" style="position: absolute; top: 5px; left: 5px; background: none; border: none; color: var(--danger); cursor: pointer;" title="تفريغ الرف"><i class="fas fa-times-circle"></i></button>
-                    <div style="font-size: 12px; font-weight: bold; color: var(--primary); margin-bottom: 5px;">الرف ${i}</div>
-                    <div style="font-size: 14px; font-weight: 800; margin-bottom: 5px;">${shelf.qty} بيضة</div>
-                    ${statusHtml}
-                </div>`;
-            }
-        }
-    } catch(e) { console.error(e); }
-}
-
-window.openShelfSetup = (shelfNum) => {
-    try {
-        const numEl = document.getElementById('selectedShelfNum');
-        const idEl = document.getElementById('selectedShelfId');
-        const qtyEl = document.getElementById('shelfLoadQty');
-        const dateEl = document.getElementById('shelfLoadDate');
-        
-        if(numEl) numEl.innerText = shelfNum;
-        if(idEl) idEl.value = shelfNum;
-        if(qtyEl) qtyEl.value = ''; 
-        
-        if(dateEl) {
-            const now = new Date();
-            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-            dateEl.value = now.toISOString().slice(0,16);
-        }
-        
-        openModal('modalShelfSetup');
-    } catch(e) { console.error(e); }
-};
-
-window.toggleShelfInputs = () => {
-    try {
-        const type = document.getElementById('shelfLoadType')?.value;
-        const multiContainer = document.getElementById('multiShelfContainer');
-        if(multiContainer) multiContainer.style.display = type === 'multi' ? 'block' : 'none';
-        window.calcShelfDist();
-    } catch(e) { console.error(e); }
-};
-
-window.calcShelfDist = () => {
-    try {
-        const type = document.getElementById('shelfLoadType')?.value;
-        const totalEggs = parseInt(document.getElementById('shelfLoadQty')?.value) || 0;
-        const hint = document.getElementById('shelfDistHint');
-        if(!hint) return;
-        
-        let shelvesCount = 1;
-        
-        if (type === 'multi') {
-            shelvesCount = parseInt(document.getElementById('multiShelfCount')?.value) || 1;
-        } else if (type === 'full') {
-            let empty = 0;
-            for(let i = 1; i <= ptoSettings.shelves; i++) { if(!incubatorShelves[`shelf_${i}`]) empty++; }
-            shelvesCount = empty;
-        }
-        
-        if(shelvesCount > 0 && totalEggs > 0) {
-            const perShelf = Math.floor(totalEggs / shelvesCount);
-            hint.innerHTML = `<i class="fas fa-layer-group"></i> سيتم تقسيم (${totalEggs} بيضة) على (${shelvesCount} أرفف) بواقع <b>~${perShelf} بيضة/رف</b> ضمن <u>دفعة واحدة</u>.`;
-        } else {
-            hint.innerHTML = '';
-        }
-    } catch(e) { console.error(e); }
-};
-
-window.loadIncubatorShelf = async () => {
-    try {
-        const startShelfNum = parseInt(document.getElementById('selectedShelfId')?.value);
-        const type = document.getElementById('shelfLoadType')?.value;
-        const dateStr = document.getElementById('shelfLoadDate')?.value;
-        const totalEggs = parseInt(document.getElementById('shelfLoadQty')?.value) || 0;
-        
-        if(!dateStr) return showToast("أدخل تاريخ الدخول", true);
-        if(totalEggs <= 0) return showToast("الرجاء إدخال إجمالي عدد البيض!", true);
-        if(totalEggs > accumulatedGoodEggs) return showToast(`رصيدك (${accumulatedGoodEggs}) غير كافٍ لهذه الدفعة!`, true);
-
-        let targetShelvesCount = 1;
-        if (type === 'multi') {
-            targetShelvesCount = parseInt(document.getElementById('multiShelfCount')?.value) || 1;
-        } else if (type === 'full') {
-            let empty = 0;
-            for(let i = 1; i <= ptoSettings.shelves; i++) { if(!incubatorShelves[`shelf_${i}`]) empty++; }
-            targetShelvesCount = empty;
-        }
-
-        if (targetShelvesCount <= 0) return showToast("لا يوجد أرفف مستهدفة!", true);
-
-        let emptyShelvesToFill = [];
-        if (!incubatorShelves[`shelf_${startShelfNum}`]) emptyShelvesToFill.push(startShelfNum);
-
-        for(let i = 1; i <= ptoSettings.shelves && emptyShelvesToFill.length < targetShelvesCount; i++) {
-            if(i !== startShelfNum && !incubatorShelves[`shelf_${i}`]) emptyShelvesToFill.push(i);
-        }
-
-        if(emptyShelvesToFill.length < targetShelvesCount) {
-            return showToast(`الأرفف الفارغة لا تكفي! المطلوب (${targetShelvesCount}) والمتاح (${emptyShelvesToFill.length}) فقط.`, true);
-        }
-
-        const perShelf = Math.floor(totalEggs / targetShelvesCount);
-        const remainder = totalEggs % targetShelvesCount;
-        let updates = {};
-        const newBatchId = push(ref(db, 'batches')).key; 
-
-        emptyShelvesToFill.forEach((shelfNum, index) => {
-            let qtyForThisShelf = perShelf + (index === 0 ? remainder : 0); 
-            updates[`shelf_${shelfNum}`] = { 
-                qty: qtyForThisShelf, 
-                insertDate: dateStr,
-                batchId: newBatchId 
-            };
-        });
-
-        await update(ref(db, "incubatorGrid"), updates);
-        await set(ref(db, "inventory/readyEggsStock"), accumulatedGoodEggs - totalEggs);
-
-        const std = birdStandards['quail']; 
-        const insertD = new Date(dateStr);
-        const hatcherD = new Date(insertD); hatcherD.setHours(insertD.getHours() + (std.hatcher * 24));
-        const hatchD = new Date(insertD); hatchD.setHours(insertD.getHours() + (std.hatch * 24));
-        const rearD = new Date(hatchD); rearD.setHours(hatchD.getHours() + (std.slaughter * 24));
-
-        let batchNameExt = targetShelvesCount > 1 ? ` (شغلت ${targetShelvesCount} أرفف)` : '';
-
-        await set(ref(db, `batches/${newBatchId}`), { 
-            name: 'دفعة ' + dateStr.split('T')[0] + batchNameExt, 
-            birdType: 'quail', 
-            insertDate: dateStr, 
-            hatcherDate: hatcherD.toISOString(), 
-            hatchDate: hatchD.toISOString(), 
-            rearDate: rearD.toISOString(), 
-            initialEggs: totalEggs, 
-            status: 'incubator', 
-            totalDead: 0, 
-            totalFeed: 0,
-            order: Date.now()
-        });
-
-        showToast(`تم إدخال الدفعة وتوزيعها بنجاح على ${targetShelvesCount} أرفف! 🚀`);
-        closeModal('modalShelfSetup');
-    } catch(e) { console.error(e); }
-};
-
-window.emptyShelf = async (shelfNum) => {
-    if(confirm(`هل أنت متأكد من تفريغ الرف رقم ${shelfNum}؟ (تأكد من التعامل مع الدفعة الناتجة من صفحة المفرخ الأساسية)`)) {
-        try {
-            await remove(ref(db, `incubatorGrid/shelf_${shelfNum}`));
-            showToast("تم تفريغ الرف وهو الآن جاهز لدفعة جديدة.");
-        } catch(e) { console.error(e); }
-    }
-};
+</body>
+</html>
