@@ -477,29 +477,53 @@
         <!-- نهاية صفحة جرد المعدات -->
 
         <div id="finance" class="page-view">
-            <div class="header-title">     <span>الماليات والنتائج</span>     <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="resetFinancials()">         <i class="fas fa-broom"></i> تصفير الدفتر     </button> </div>
-            <div class="card" style="background: var(--surface); border: 1px solid var(--primary); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.05);"><div style="text-align: center;"><span style="font-size: 14px; color: var(--text-secondary);">صافي الربح العام</span><div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--primary);" id="netProfit">0 ج.م</div></div><div class="grid-2" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"><div style="text-align: center; color:var(--text-secondary);">إيرادات<br><strong class="text-success" id="totalRev" style="font-size: 18px;">0</strong></div><div style="text-align: center; color:var(--text-secondary);">مصروفات<br><strong class="text-danger" id="totalExp" style="font-size: 18px;">0</strong></div></div><button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:14px;" onclick="openModal('modalExpense')"><i class="fas fa-file-invoice"></i> تسجيل مصروف جديد</button></div>
-            <div class="card"><div class="card-header">بيان ختامي للدفعة (P&L)</div><select id="reportBatchSelect" onchange="generateBatchReport()"><option value="">-- اختر الدفعة --</option></select><div id="batchReportContainer" style="margin-top: 15px; display: none;"></div></div>
-          <div class="search-bar-container">
-    
-    <input type="text" 
-           class="search-input"
-           placeholder="🔍 ابحث هنا..." 
-           onkeyup="searchLedger(this.value)">
-    
-    <select class="search-select" 
-            onchange="filterLedger(this.value)">
-        <option value="all">الكل 📜</option>
-        <option value="in">وارد 🟢</option>
-        <option value="out">مصروف 🔴</option>
-        <option value="batch_cost">سحب عيني 🟡</option>
-    </select>
-    
-</div>
+            <div class="header-title">
+                <span>المركز المالي والتقفيل</span>
+                <button class="btn btn-warning" style="width: auto; padding: 6px 12px; margin: 0; font-size: 14px; border-radius: 8px;" onclick="closeMonth()">
+                    <i class="fas fa-lock"></i> تقفيل الشهر
+                </button>
+            </div>
 
- 
-            <div class="card"><div class="card-header">سجل المعاملات</div><div id="ledgerList"></div></div>
+            <!-- الصندوق التراكمي الحر (صندوق الأرباح والخسائر) -->
+            <div class="card" style="background: linear-gradient(135deg, var(--primary), var(--info)); color: white; border: none; box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2);">
+                <div style="text-align: center;">
+                    <span style="font-size: 14px; opacity: 0.9;">الرصيد التراكمي الحر (أرباح/خسائر المزرعة)</span>
+                    <div style="font-size: 40px; font-weight: 900; margin: 15px 0;" id="cumulativeBalanceDisplay" dir="ltr">0 ج.م</div>
+                    <span style="font-size: 12px; background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 20px;">مستقل تماماً عن جرد المعدات والأصول الثابتة</span>
+                </div>
+            </div>
+
+            <!-- عدادات حركة الشهر الحالي -->
+            <div class="card">
+                <div class="card-header"><i class="fas fa-chart-line"></i> حركة الشهر الحالي (لم يتم تقفيلها)</div>
+                <div class="grid-2">
+                    <div style="background: rgba(34, 197, 94, 0.05); border: 1px dashed var(--success); padding: 15px; border-radius: 12px; text-align: center;">
+                        <span style="color: var(--text-secondary); font-size: 13px;">إيرادات (تصفية دفعات)</span>
+                        <div style="color: var(--success); font-size: 26px; font-weight: 800; margin-top: 5px;" id="currentMonthRevenue">0 ج.م</div>
+                    </div>
+                    <div style="background: rgba(239, 68, 68, 0.05); border: 1px dashed var(--danger); padding: 15px; border-radius: 12px; text-align: center;">
+                        <span style="color: var(--text-secondary); font-size: 13px;">مصروفات عامة وتكاليف</span>
+                        <div style="color: var(--danger); font-size: 26px; font-weight: 800; margin-top: 5px;" id="currentMonthExpenses">0 ج.م</div>
+                    </div>
+                </div>
+                <button class="btn" style="background:var(--bg-main); border: 1px solid var(--border); color:var(--text-primary); margin-top:20px; font-size:15px;" onclick="openModal('modalExpense')">
+                    <i class="fas fa-file-invoice-dollar"></i> تسجيل مصروف عام جديد
+                </button>
+            </div>
+
+            <!-- أرشيف الدفعات المصفاة -->
+            <div class="card">
+                <div class="card-header"><i class="fas fa-box-archive"></i> أرشيف الدفعات المصفاة</div>
+                <div id="archivedBatchesList"></div>
+            </div>
+            
+            <!-- سجل مصروفات الشهر -->
+            <div class="card">
+                <div class="card-header"><i class="fas fa-list"></i> سجل مصروفات الشهر الحالي</div>
+                <div id="ledgerList"></div>
+            </div>
         </div>
+
 
         <div id="settingsPage" class="page-view">
             <div class="header-title" style="margin-bottom: 20px;">
@@ -926,6 +950,25 @@
         </div>
     </div>
 
+    <!-- نافذة أرشفة وتصفية الدفعات (النظام الجديد) -->
+    <div id="modalArchiveBatch" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalArchiveBatch')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--success);"><i class="fas fa-box-archive"></i> تصفية وأرشفة الدفعة</h3>
+            <input type="hidden" id="archiveBatchId">
+            
+            <div style="background: rgba(34, 197, 94, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--success);">
+                <p style="margin: 0; font-size: 13px; color: var(--text-primary); font-weight: 600;">
+                    أنت الآن تقوم بتصفية الدفعة نهائياً. سيتم نقلها للأرشيف وإضافة إيرادها لعداد الشهر الحالي بشكل آلي.
+                </p>
+            </div>
+            
+            <label>إجمالي إيراد المبيعات من هذه الدفعة (ج.م)</label>
+            <input type="number" id="archiveRevenue" placeholder="مثال: 15000">
+            
+            <button class="btn btn-success" style="margin-top: 20px;" onclick="confirmArchiveBatch()">تأكيد التصفية وإضافة الإيراد</button>
+        </div>
+    </div>
 
 </body>
 </html>
