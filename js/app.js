@@ -24,6 +24,7 @@ let allFreezerLogs = {};
 let manualCash = 0; 
 let currentFeedStock = 0; 
 let dynamicFreezerConfig = {}; 
+let equipmentInventory = {}; // متغير الجرد ورأس المال الثابت
 
 let currentLedgerFilter = 'all'; 
 let currentLedgerSearch = '';
@@ -404,6 +405,95 @@ window.renderFreezerLogs = () => {
     });
     
     el.innerHTML = html || '<div style="text-align:center; padding:10px; color:var(--text-secondary);">لا توجد سجلات تخزين</div>';
+};
+// ================= 4.5 جرد المعدات (رأس المال الثابت) =================
+onValue(ref(db, "inventory/equipment"), (snapshot) => {
+    equipmentInventory = snapshot.exists() ? snapshot.val() : {};
+    if(typeof window.renderInventoryList === 'function') window.renderInventoryList();
+});
+
+window.renderInventoryList = () => {
+    const listEl = document.getElementById('inventoryList');
+    const dashTotalEl = document.getElementById('dashInventoryTotal');
+    const pageTotalEl = document.getElementById('inventoryTotalValue');
+    
+    if(!listEl) return;
+    
+    let html = '';
+    let totalCapital = 0;
+
+    if(Object.keys(equipmentInventory).length === 0) {
+        html = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد معدات مضافة حتى الآن.</div>';
+    } else {
+        Object.keys(equipmentInventory).forEach(id => {
+            const item = equipmentInventory[id];
+            const itemTotal = item.qty * item.price;
+            totalCapital += itemTotal;
+            
+            html += `
+            <div style="background: var(--surface); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s;" onmouseover="this.style.borderColor='var(--info)'" onmouseout="this.style.borderColor='var(--border)'">
+                <div>
+                    <strong style="font-size: 16px; color: var(--text-primary);">${item.name}</strong>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-top: 5px;">
+                        السعر: ${item.price} ج.م | الإجمالي: <span style="color: var(--info); font-weight: bold;">${itemTotal} ج.م</span>
+                    </div>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; flex-direction: column; align-items: center; background: var(--bg-main); padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);">
+                        <span style="font-size: 10px; color: var(--text-secondary);">العدد</span>
+                        <strong style="font-size: 18px; color: var(--primary);">${item.qty}</strong>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <button class="btn btn-success" style="padding: 4px 10px; font-size: 12px; margin: 0; width: auto;" onclick="updateInventoryItemQty('${id}', 1)" title="إضافة جديد">+</button>
+                        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 12px; margin: 0; width: auto;" onclick="updateInventoryItemQty('${id}', -1)" title="هالك / تالف">-</button>
+                    </div>
+                    <button class="btn" style="background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 8px; margin: 0; width: auto;" onclick="deleteInventoryItem('${id}')" title="حذف الصنف نهائياً"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>`;
+        });
+    }
+    
+    listEl.innerHTML = html;
+    if(dashTotalEl) dashTotalEl.innerText = totalCapital;
+    if(pageTotalEl) pageTotalEl.innerText = totalCapital + " ج.م";
+};
+
+window.addOrUpdateInventoryItem = async () => {
+    const name = document.getElementById('invItemName')?.value.trim();
+    const qty = parseInt(document.getElementById('invItemQty')?.value) || 0;
+    const price = parseFloat(document.getElementById('invItemPrice')?.value) || 0;
+    
+    if(!name || qty <= 0 || price < 0) return showToast("برجاء إدخال بيانات صحيحة", true);
+    
+    const newId = 'eq_' + Date.now();
+    await set(ref(db, `inventory/equipment/${newId}`), { name, qty, price });
+    
+    closeModal('modalManageInventory');
+    showToast("تمت إضافة الصنف للجرد بنجاح 🛠️");
+};
+
+window.updateInventoryItemQty = async (id, change) => {
+    const item = equipmentInventory[id];
+    if(!item) return;
+    
+    const newQty = item.qty + change;
+    if(newQty < 0) return showToast("لا يمكن أن يكون العدد بالسالب!", true);
+    
+    await update(ref(db, `inventory/equipment/${id}`), { qty: newQty });
+    
+    if(change < 0) {
+        showToast("تم تسجيل هالك وخصم القيمة من رأس المال 📉");
+    } else {
+        showToast("تمت الزيادة بنجاح 📈");
+    }
+};
+
+window.deleteInventoryItem = async (id) => {
+    if(confirm("هل أنت متأكد من حذف هذا الصنف نهائياً من الجرد؟")) {
+        await remove(ref(db, `inventory/equipment/${id}`));
+        showToast("تم الحذف بنجاح");
+    }
 };
 
 // ================= 5. الدفعات والذبح الديناميكي =================
