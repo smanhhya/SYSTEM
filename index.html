@@ -208,6 +208,7 @@
         <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>عنابر التربية</span></div>
         <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>المخزون (فريزر)</span></div>
         <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>الماليات P&L</span></div>
+        <div class="nav-item" onclick="switchPage('inventory')"><i class="fas fa-boxes"></i><span>جرد المعدات</span></div>
         <div style="flex: 1;"></div>
         <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>الإعدادات</span></div>
     </aside>
@@ -218,6 +219,7 @@
         <div class="nav-item" onclick="switchPage('rearing')"><i class="fas fa-kiwi-bird"></i><span>تربية</span></div>
         <div class="nav-item" onclick="switchPage('freezer')"><i class="fas fa-snowflake"></i><span>فريزر</span></div>
         <div class="nav-item" onclick="switchPage('finance')"><i class="fas fa-wallet"></i><span>حسابات</span></div>
+        <div class="nav-item" onclick="switchPage('inventory')"><i class="fas fa-boxes"></i><span>جرد</span></div>
         <div class="nav-item" onclick="switchPage('settingsPage')"><i class="fas fa-cog"></i><span>إعدادات</span></div>
     </nav>
 
@@ -238,11 +240,12 @@
             
             <div class="card">
                 <div class="card-header">ملخص المزرعة <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal;">(اضغط للتفاصيل)</span></div>
-                <div class="grid-2">
+                <div class="grid-2" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));">
                     <div class="stat-box" style="cursor: pointer;" onclick="switchPage('incubator')">بالماكينة<span class="num" id="dashEggs">0</span></div>
                     <div class="stat-box" style="cursor: pointer;" onclick="switchPage('rearing')">بالعنابر<span class="num" id="dashChicks">0</span></div>
                     <div class="stat-box" style="border-color:var(--success); cursor: pointer;" onclick="switchPage('freezer')">بالفريزر<span class="num text-success" id="dashFreezer">0</span></div>
                     <div class="stat-box" style="border-color:var(--warning); cursor: pointer;" onclick="switchPage('finance')">مبيعات<span class="num text-warning" id="dashSales">0</span></div>
+                    <div class="stat-box" style="border-color:var(--info); cursor: pointer;" onclick="switchPage('inventory')">رأس المال<span class="num text-info" id="dashInventoryTotal">0</span><span style="font-size: 10px;">ج.م</span></div>
                 </div>
             </div>
             
@@ -450,6 +453,28 @@
                 <div id="freezerLogs"></div>
             </div>
         </div>  
+        <!-- بداية صفحة جرد المعدات (رأس المال الثابت) -->
+        <div id="inventory" class="page-view">
+            <div class="header-title">
+                <span>جرد المعدات ورأس المال</span>
+                <button class="btn btn-info btn-sm" onclick="openModal('modalManageInventory')">
+                    <i class="fas fa-plus"></i> إضافة/تعديل صنف
+                </button>
+            </div>
+            
+            <div class="card" style="border-right: 4px solid var(--info); text-align: center;">
+                <span style="font-size: 14px; color: var(--text-secondary);">إجمالي رأس المال الثابت (المعدات)</span>
+                <div style="font-size: 36px; font-weight: 800; margin: 10px 0; color:var(--info);" id="inventoryTotalValue">0 ج.م</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">سجل المعدات الحالي</div>
+                <div id="inventoryList" style="margin-top: 15px;">
+                    <!-- سيتم رسم الأصناف هنا بواسطة الجافاسكربت -->
+                </div>
+            </div>
+        </div>
+        <!-- نهاية صفحة جرد المعدات -->
 
         <div id="finance" class="page-view">
             <div class="header-title">     <span>الماليات والنتائج</span>     <button class="btn btn-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 12px; border-radius: 6px;" onclick="resetFinancials()">         <i class="fas fa-broom"></i> تصفير الدفتر     </button> </div>
@@ -838,6 +863,29 @@
             <h4>الأصناف الحالية</h4>
             <div id="freezerCategoriesList" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 1px dashed var(--border); border-radius: 8px;">
             </div>
+        </div>
+    </div>
+    <!-- نافذة إضافة وتعديل المعدات -->
+    <div id="modalManageInventory" class="modal-overlay">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal('modalManageInventory')"><i class="fas fa-times"></i></button>
+            <h3 style="margin-top: 0; color: var(--info);">🛠️ إضافة صنف للجرد (معدات)</h3>
+            
+            <label>اسم الصنف (مثال: طبق تحضين)</label>
+            <input type="text" id="invItemName" placeholder="أدخل اسم المعدة">
+            
+            <div class="grid-2">
+                <div>
+                    <label>العدد الإجمالي</label>
+                    <input type="number" id="invItemQty" placeholder="مثال: 100">
+                </div>
+                <div>
+                    <label>سعر الوحدة (ج.م)</label>
+                    <input type="number" id="invItemPrice" placeholder="مثال: 10">
+                </div>
+            </div>
+            
+            <button class="btn btn-info" style="margin-top: 20px;" onclick="addOrUpdateInventoryItem()">حفظ الصنف في الجرد</button>
         </div>
     </div>
 
