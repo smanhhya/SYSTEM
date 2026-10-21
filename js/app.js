@@ -2149,3 +2149,119 @@ window.renderArchivedBatches = () => {
     if(!html) html = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">لا توجد دفعات مصفاة في الأرشيف حتى الآن.</div>';
     list.innerHTML = html;
 };
+// =====================================================================
+// === دالة شراء العلف وربطها بالمصروفات الشهرية أوتوماتيك ===
+// =====================================================================
+window.buyFeed = async () => {
+    try {
+        const qty = parseFloat(document.getElementById('bfQty')?.value) || 0;
+        const cost = parseFloat(document.getElementById('bfTotalCost')?.value) || 0;
+        
+        if(!qty || !cost) return showToast("برجاء إدخال البيانات", true);
+
+        // 1. قراءة رصيد العلف الحالي من قاعدة البيانات
+        const snapshot = await get(ref(db, "inventory/feedStock"));
+        const currentFeedStock = snapshot.exists() ? parseFloat(snapshot.val()) : 0;
+
+        // 2. تزويد رصيد العلف العيني في المخزن
+        await set(ref(db, "inventory/feedStock"), currentFeedStock + qty);
+        
+        // 3. تسجيل المصروف في الدفتر عشان يظهر في سجل المعاملات
+        await push(ref(db, 'ledger'), { 
+            type: 'out', 
+            amount: cost, 
+            desc: `شراء علف (${qty} كجم)`, 
+            batchId: 'general', 
+            date: new Date().toISOString().split('T')[0], 
+            timestamp: Date.now() 
+        });
+        
+        // 4. ربط الفلوس بمصروفات الشهر الحالي أوتوماتيك (السحر المحاسبي)
+        await set(ref(db, "financialCenter/currentMonthExpenses"), currentMonthExpenses + cost);
+        
+        closeModal('modalBuyFeed'); 
+        showToast(`تم إضافة ${qty} كجم وتسجيل مصروف بـ ${cost} ج.م! 💸`);
+    } catch(e) { 
+        console.error("خطأ في شراء العلف:", e); 
+        showToast("حدث خطأ أثناء التنفيذ", true);
+    }
+};
+window.moveToRearing = async () => {
+    try {
+        const id = document.getElementById('hatchBatchId')?.value;
+        const healthy = parseInt(document.getElementById('hHealthy')?.value) || 0;
+        const unfert = parseInt(document.getElementById('hUnfert')?.value) || 0;
+        const dead = parseInt(document.getElementById('hDead')?.value) || 0;
+        const rearingSys = document.getElementById('hRearingSystem')?.value || 'floor';
+        
+        if(!id || healthy < 0) return showToast("أدخل أرقاماً صحيحة", true);
+        const b = allBatches[id]; if(!b) return;
+        const totalOut = healthy + unfert + dead;
+
+        if (totalOut > (b.initialEggs || 0)) return showToast("المخرجات أكبر من البيض!", true);
+
+        const hatchDateObj = new Date(b.hatchDate);
+        const std = birdStandards[b.birdType || 'quail'];
+        const autoSlaughterAge = std ? std.slaughter : 35; 
+        const autoSlaughterDateObj = new Date(hatchDateObj);
+        autoSlaughterDateObj.setDate(autoSlaughterDateObj.getDate() + autoSlaughterAge);
+        
+        const autoNewName = `دفعة ${autoSlaughterDateObj.getDate()}/${autoSlaughterDateObj.getMonth() + 1}`;
+        const hatchRate = b.initialEggs > 0 ? ((healthy / b.initialEggs) * 100).toFixed(1) : 0;
+        
+        // نقل فيزيائي فقط بدون أي عمليات مالية (لأن دي دورة واحدة)
+        await update(ref(db, `batches/${id}`), { 
+            name: autoNewName, rearDate: autoSlaughterDateObj.toISOString(), slaughterAge: autoSlaughterAge,              
+            status: 'rearing', hatchedChicks: healthy, hatchRate: hatchRate, rearingSystem: rearingSys, unfertilized: unfert, deadInShell: dead
+        });
+
+        closeModal('modalHatch'); showToast(`تم النقل للتربية باسم (${autoNewName})! 🚀`);
+    } catch(e) { console.error(e); }
+};
+window.sellBatchDirectly = async (id) => {
+    const amountStr = prompt("أدخل إجمالي مبلغ البيع للكتاكيت (ج.م):");
+    if(amountStr === null) return;
+    const amount = parseFloat(amountStr);
+    if(isNaN(amount) || amount <= 0) return showToast("مبلغ غير صحيح", true);
+
+    try {
+        const b = allBatches[id]; if(!b) return;
+        
+        // إضافة الإيراد لعداد الشهر
+        await set(ref(db, "financialCenter/currentMonthRevenue"), currentMonthRevenue + amount);
+
+        // أرشفة الدفعة وتوثيقها
+        b.status = 'archived';
+        b.finalRevenue = amount;
+        b.archiveDate = new Date().toISOString().split('T')[0];
+        b.note = "بيع مباشر من المفرخ (كتاكيت عمر يوم)";
+        
+        await set(ref(db, `archivedBatches/${id}`), b);
+        await remove(ref(db, `batches/${id}`));
+        
+        showToast("تم بيع الكتاكيت وأرشفة الدفعة وإضافة الإيراد 💰");
+    } catch(e) { console.error(e); }
+};
+window.saveDailyLog = async () => {
+    try {
+        const id = document.getElementById('dBatch')?.value;
+        const dead = parseInt(document.getElementById('dDead')?.value) || 0;
+        const feed = parseFloat(document.getElementById('dFeed')?.value) || 0;
+        if(!id || (dead===0 && feed===0) || dead < 0 || feed < 0) return showToast("أدخل بيانات صحيحة", true);
+
+        const b = allBatches[id]; if(!b) return;
+        const today = new Date().toISOString().split('T')[0];
+        const aliveBirds = (b.hatchedChicks || 0) - (b.totalDead || 0);
+
+        if (dead > aliveBirds) return showToast("النافق أكبر من الموجود!", true);
+        await push(ref(db, `batches/${id}/dailyLogs`), { date: today, dead, feed });
+
+        if(feed > 0) {
+            if(currentFeedStock < feed) return alert(`الرصيد لا يكفي!`);
+            // ينقص من المخزن ككمية (كجم) فقط، الفلوس اتدفعت خلاص في شاشة الشراء
+            await set(ref(db, "inventory/feedStock"), currentFeedStock - feed);
+        }
+        await update(ref(db, `batches/${id}`), { totalDead: (b.totalDead||0) + dead, totalFeed: (b.totalFeed||0) + feed });
+        closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك اليومي بنجاح");
+    } catch(e) { console.error(e); }
+};
