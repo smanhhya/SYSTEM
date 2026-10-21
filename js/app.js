@@ -2265,3 +2265,78 @@ window.saveDailyLog = async () => {
         closeModal('modalDaily'); showToast("تم تسجيل الاستهلاك اليومي بنجاح");
     } catch(e) { console.error(e); }
 };
+// =====================================================================
+// === إصلاحات محاسبية شاملة لربط المبيعات والإيرادات بالمركز المالي ===
+// =====================================================================
+
+// 1. الدالة المركزية لتسجيل الأموال (تفرق بين الإيراد والمصروف)
+window.saveTransaction = async (type, amountOverride = null, descOverride = null) => {
+    try {
+        const amount = amountOverride || parseFloat(document.getElementById('eAmount')?.value);
+        const desc = descOverride || document.getElementById('eType')?.value;
+        const batchId = 'general';
+        if(!amount) return showToast("أدخل المبلغ", true);
+
+        // تسجيل في الدفتر
+        await push(ref(db, 'ledger'), { type, amount, desc, batchId, date: new Date().toISOString().split('T')[0], timestamp: Date.now() });
+        
+        // توجيه الفلوس للمكان الصح بناءً على نوع المعاملة (السحر المحاسبي)
+        if (type === 'in') {
+            await set(ref(db, "financialCenter/currentMonthRevenue"), currentMonthRevenue + amount);
+        } else if (type === 'out') {
+            await set(ref(db, "financialCenter/currentMonthExpenses"), currentMonthExpenses + amount);
+        }
+        
+        if(!amountOverride) { closeModal('modalExpense'); showToast("تم التسجيل بنجاح 💸"); }
+    } catch(e) { console.error(e); }
+};
+
+// 2. تحديث بيع اللحم من الفريزر (ليسمع في إيرادات الشهر)
+window.processSale = async () => {
+    try {
+        const grade = document.getElementById('sGrade')?.value;
+        const qty = parseInt(document.getElementById('sQty')?.value) || 0;
+        if(!grade || !qty) return showToast("أدخل بيانات البيع", true);
+
+        const amount = qty * (dynamicFreezerConfig[grade]?.price || 0);
+        const snap = await get(ref(db, `inventory/freezerStock/${grade}`));
+        const currentStock = snap.exists() ? snap.val() : 0;
+        if(currentStock < qty) return showToast(`الرصيد لا يكفي! المتاح: ${currentStock}`, true);
+
+        await set(ref(db, `inventory/freezerStock/${grade}`), currentStock - qty);
+        // استدعاء دالة المعاملات كـ "إيراد"
+        await saveTransaction('in', amount, `مبيعات (${qty} جوز - ${dynamicFreezerConfig[grade].name})`);
+        
+        closeModal('modalSale'); 
+        showToast("تم البيع وإضافة الإيراد بنجاح 💰");
+    } catch(e) { console.error(e); }
+};
+
+// 3. تحديث بيع البيض من المفرخ (ليسمع في إيرادات الشهر)
+window.sellEggsFromIncubator = async (batchId) => {
+    try {
+        const batch = allBatches[batchId];
+        if(!batch) return;
+        
+        let eggPrice = 0;
+        if(batch.birdType === 'quail') eggPrice = globalSettings.quailChick || 0;
+        else if(batch.birdType === 'chicken') eggPrice = globalSettings.chickenChick || 0;
+        else if(batch.birdType === 'turkey') eggPrice = globalSettings.turkeyEgg || 0;
+
+        const qty = prompt(`كم عدد البيض المباع من دفعة "${batch.name}"؟\n(سعر البيضة المبرمج: ${eggPrice} ج.م)`, "0");
+        
+        if(qty && !isNaN(qty) && parseInt(qty) > 0) {
+            const sellQty = parseInt(qty);
+            if(sellQty > (batch.initialEggs || 0)) return showToast("العدد أكبر من المتاح!", true);
+            
+            const totalAmount = sellQty * eggPrice;
+            
+            // خصم البيض من المفرخ
+            await update(ref(db, `batches/${batchId}`), { initialEggs: (batch.initialEggs || 0) - sellQty });
+            // تسجيل الفلوس كـ "إيراد"
+            await saveTransaction('in', totalAmount, `بيع بيض (${sellQty}) - ${batch.name}`);
+            
+            showToast(`تم بيع ${sellQty} بيضة وإضافة ${totalAmount} ج.م للإيرادات 🥚`);
+        }
+    } catch(e) { console.error(e); }
+};
